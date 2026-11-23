@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from collect_myhome import DATA, HERE, KST
 
 OUT = os.path.join(HERE, "site", "index.html")
-# 방문자 통계(GoatCounter) 코드. 예: "korea-lease" → https://korea-lease.goatcounter.com  (비워 두면 통계 끔)
+# 방문자 통계(GoatCounter) 코드 → https://korea-lease.goatcounter.com 관리자 화면 (빈 값이면 통계 끔)
 GOATCOUNTER = os.environ.get("GOATCOUNTER_CODE", "korea-lease")
 
 
