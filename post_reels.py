@@ -63,6 +63,13 @@ def check():
     d = (lim.get("data") or [{}])[0]
     total = (d.get("config") or {}).get("quota_total", "?")
     print(f"::notice::토큰 확인 성공 — 계정 @{me.get('username')} / {kind} / 24시간 게시 한도 {d.get('quota_usage', 0)}/{total}")
+    try:
+        media = call("GET", f"{API}/{USER}/media", {"fields": "id,media_product_type,timestamp,permalink", "limit": "5"})
+        items = media.get("data") or []
+        print(f"::notice::최근 게시물 {len(items)}건: " + " | ".join(
+            f"{m.get('media_product_type')} {m.get('timestamp', '')[:16]} {m.get('permalink', '')}" for m in items))
+    except SystemExit:
+        pass
 
 
 def refresh_token():
