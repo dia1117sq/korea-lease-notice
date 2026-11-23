@@ -28,6 +28,17 @@ def core(name):
     return re.sub(r"(공공분양|민영|입주자모집공고|입주자모집|모집공고|공고)$", "", name)
 
 
+CORR = re.compile(r"\[\s*정정\s*(공고)?\s*\]|\(\s*정정\s*(공고)?\s*\)|정정공고")
+
+
+def is_correction(n):
+    return n.get("공고상태") == "정정공고" or bool(CORR.search(n["공고명"] or ""))
+
+
+def norm_title(t):
+    return re.sub(r"\s+", "", CORR.sub("", t or ""))
+
+
 def similar(a, b):
     a, b = core(a), core(b)
     if not a or not b:
@@ -52,9 +63,14 @@ def main():
     out = {}
 
     # 1) 마이홈: 공고 단위로 묶기
+    mh_key = {}        # (구분, 마이홈 공고ID) → 통합 공고 key
+    corrections = []   # (구분, 정정 공고 key, 정정 전 마이홈 공고ID)
     for r in mh:
         p = pan(r["공고원문URL"])
         key = f"LH-{p}" if p else f"MH-{r['구분']}-{r['id'].split('-')[1]}"
+        mh_key[(r["구분"], r["id"].split("-")[1])] = key
+        if r.get("정정전공고ID"):
+            corrections.append((r["구분"], key, r["정정전공고ID"]))
         n = out.get(key)
         if not n:
             n = out[key] = {
@@ -118,6 +134,27 @@ def main():
             "시공사": r["시공사"], "청약일정": sched,
         }
 
+    # 4) 정정공고가 나오면 이전 공고는 숨김
+    #   a) 마이홈의 정정 전 공고ID 사슬
+    replaced = {}
+    for kind, key, before in corrections:
+        old_key = mh_key.get((kind, before))
+        if old_key and old_key != key and old_key in out:
+            replaced[old_key] = key
+    #   b) ID 연결이 없는 경우: [정정공고]를 뺀 공고명 + 시도가 같은 묶음에서 가장 최근 정정공고만 남김
+    groups = {}
+    for k, n in out.items():
+        if k not in replaced:
+            groups.setdefault((norm_title(n["공고명"]), n["시도"]), []).append(n)
+    for g in groups.values():
+        if len(g) > 1 and any(is_correction(n) for n in g):
+            keep = max(g, key=lambda n: (n["모집공고일"] or "", is_correction(n), n["id"]))
+            for n in g:
+                if n is not keep and (n["모집공고일"] or "") <= (keep["모집공고일"] or ""):
+                    replaced[n["id"]] = keep["id"]
+    for k in replaced:
+        out.pop(k, None)
+
     rows = list(out.values())
     for n in rows:
         n["출처"] = sorted(set(n["출처"]))
@@ -142,6 +179,7 @@ def main():
     if new:
         json.dump(new, open(os.path.join(DATA, f"merged_new_{now:%Y%m%d}.json"), "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1)
+    print(f"정정으로 대체된 이전 공고 {len(replaced)}건 제외")
     print(f"통합 {len(rows)}건 (진행중·예정 {sum(n['접수상태'] != '접수마감' for n in rows)}건) / 신규 {len(new)}건"
           + ("" if old else " (첫 실행: 기준선 저장)"))
 
