@@ -18,3 +18,11 @@
 - 저장소 Settings → Secrets and variables → Actions 에 `DATA_GO_KR_KEY` 등록
 - Settings → Pages → Source: **GitHub Actions**
 - Actions 탭의 daily-update → Run workflow 로 즉시 실행 가능
+
+## 인스타그램 자동 게시 (매주 월요일)
+`.github/workflows/weekly-reels.yml` — 월 06:20 시작 → 최신 공고 수집 → `make_video.py` 로 릴스 2편(공급 규모 1~5위 / 6~10위) →
+사이트 `reels/` 에 영상 공개 → `post_reels.py` 가 **07:00 PART 1, 07:10 PART 2** 게시.
+- 필요한 Secret: `IG_USER_ID`, `IG_ACCESS_TOKEN` (Instagram API with Instagram Login, 권한 `instagram_business_basic`, `instagram_business_content_publish`)
+- 시험: Actions → weekly-reels → Run workflow (게시 체크 해제 = 영상만 생성)
+- 토큰은 실행 때마다 만료 연장을 시도합니다. 실행 화면에 토큰 변경 경고가 뜨면 Secret을 새 값으로 바꿔 주세요.
+- 만든 영상·캡션은 실행 화면 하단 Artifacts(reels)에서 30일간 내려받을 수 있습니다.
