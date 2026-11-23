@@ -61,6 +61,15 @@ h1 a{color:inherit;text-decoration:none}
 .title{font-weight:600;font-size:15.5px;margin:0 0 4px;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
 .meta{color:var(--muted);font-size:13.5px;display:flex;gap:4px 10px;flex-wrap:wrap}
 .tag{color:var(--accent);font-weight:600}
+.list{padding-bottom:12px!important}
+.pager{display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 0 40px}
+.pager button{font:inherit;font-size:14px;min-width:38px;height:38px;padding:0 10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;cursor:pointer;font-variant-numeric:tabular-nums}
+.pager button:hover:not(:disabled){border-color:var(--accent)}
+.pager button[aria-current="page"]{background:var(--accent);border-color:var(--accent);color:var(--surface);font-weight:600}
+.pager button:disabled{opacity:.4;cursor:default}
+.pager button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.pager .gap{color:var(--muted);padding:0 2px}
+.pager .loadmore{width:100%;height:44px}
 .empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:28px;text-align:center;color:var(--muted)}
 /* 상세 */
 .detail{padding:18px 0 48px}
@@ -129,6 +138,7 @@ footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px so
     </div>
     <p class="count" id="count"></p>
     <div class="list" id="list"></div>
+    <div class="pager" id="pager"></div>
   </section>
   <section id="detailView" class="detail" hidden></section>
 </main>
@@ -165,6 +175,21 @@ function fillSelect(el, label, vals){
 function counts(){ return {open:items.filter(n=>n.접수상태==="접수중").length, soon:items.filter(n=>n.접수상태==="접수예정").length,
   today:items.filter(n=>n.접수상태==="접수중" && n.접수마감===DATA.today).length}; }
 
+const PAGE = 30;
+const view = {list:[], shown:0, page:1, scrollY:0};
+const mobileMQ = matchMedia("(max-width:620px)");
+let io = null;
+
+function rowHtml(n){
+  const dd = dday(n), hot = /오늘|D-[0-3]$/.test(dd) && n.접수상태==="접수중";
+  return `<a class="row" href="#${n.k}">
+    <div class="when">${pill(n.접수상태)}<span class="dday${hot?" hot":""}">${esc(dd)}</span></div>
+    <div><p class="title">${esc(n.공고명)}</p>
+      <div class="meta"><span class="tag">${esc(n.구분)} · ${esc(typeOf(n))}</span><span>${esc(region(n))}</span>
+      ${n.총공급호수?`<span>${Number(n.총공급호수).toLocaleString()}호</span>`:""}<span>${esc(n.공급기관||"")}</span>
+      ${period(n)?`<span>접수 ${esc(period(n))}</span>`:""}</div></div></a>`;
+}
+
 function renderList(){
   const q = state.q.trim().toLowerCase();
   let r = items.filter(n => state.st.has(n.접수상태)
@@ -178,17 +203,61 @@ function renderList(){
   if (state.sort === "deadline") r.sort((a,b) => (rank[a.접수상태]-rank[b.접수상태]) || (a.접수상태==="접수마감" ? cmp(day(b),day(a)) : cmp(day(a),day(b))));
   if (state.sort === "recent") r.sort((a,b) => cmp(b.모집공고일||"", a.모집공고일||""));
   if (state.sort === "size") r.sort((a,b) => (b.총공급호수||0) - (a.총공급호수||0));
-  $("#count").textContent = `${r.length.toLocaleString()}건`;
-  $("#list").innerHTML = r.length ? r.map(n => {
-    const dd = dday(n), hot = /오늘|D-[0-3]$/.test(dd) && n.접수상태==="접수중";
-    return `<a class="row" href="#${n.k}">
-      <div class="when">${pill(n.접수상태)}<span class="dday${hot?" hot":""}">${esc(dd)}</span></div>
-      <div><p class="title">${esc(n.공고명)}</p>
-        <div class="meta"><span class="tag">${esc(n.구분)} · ${esc(typeOf(n))}</span><span>${esc(region(n))}</span>
-        ${n.총공급호수?`<span>${Number(n.총공급호수).toLocaleString()}호</span>`:""}<span>${esc(n.공급기관||"")}</span>
-        ${period(n)?`<span>접수 ${esc(period(n))}</span>`:""}</div></div></a>`; }).join("")
-    : `<div class="empty">조건에 맞는 공고가 없습니다. 검색어나 필터를 바꿔 보세요.</div>`;
+  view.list = r; view.shown = 0;
+  $("#list").innerHTML = "";
+  if (!r.length){
+    $("#count").textContent = "0건";
+    $("#list").innerHTML = `<div class="empty">조건에 맞는 공고가 없습니다. 검색어나 필터를 바꿔 보세요.</div>`;
+    $("#pager").innerHTML = ""; return;
+  }
+  mobileMQ.matches ? loadMore() : showPage(1, false);
 }
+
+// 모바일: 30개씩 이어 붙이기 (화면 끝에 닿으면 자동, 버튼으로도 가능)
+function loadMore(){
+  const next = view.list.slice(view.shown, view.shown + PAGE);
+  $("#list").insertAdjacentHTML("beforeend", next.map(rowHtml).join(""));
+  view.shown += next.length;
+  const total = view.list.length;
+  $("#count").textContent = `${total.toLocaleString()}건`;
+  if (io) { io.disconnect(); io = null; }
+  if (view.shown < total){
+    $("#pager").innerHTML = `<button class="loadmore" id="loadmore">더 보기 (${view.shown} / ${total})</button>`;
+    $("#loadmore").onclick = loadMore;
+    if ("IntersectionObserver" in window){
+      io = new IntersectionObserver(es => { if (es[0].isIntersecting && !$("#listView").hidden) loadMore(); }, {rootMargin:"400px"});
+      io.observe($("#loadmore"));
+    }
+  } else {
+    $("#pager").innerHTML = total > PAGE ? `<p class="note">모든 공고를 불러왔습니다.</p>` : "";
+  }
+}
+
+// PC: 페이지 번호
+function showPage(p, scroll){
+  const total = view.list.length, pages = Math.ceil(total / PAGE);
+  p = Math.min(Math.max(1, p), pages); view.page = p;
+  const s = (p - 1) * PAGE;
+  $("#list").innerHTML = view.list.slice(s, s + PAGE).map(rowHtml).join("");
+  view.shown = Math.min(s + PAGE, total);
+  $("#count").textContent = `${total.toLocaleString()}건 중 ${s + 1}–${view.shown}`;
+  if (io) { io.disconnect(); io = null; }
+  if (pages <= 1){ $("#pager").innerHTML = ""; }
+  else {
+    const nums = [...new Set([1, p-2, p-1, p, p+1, p+2, pages])].filter(x => x >= 1 && x <= pages).sort((a,b) => a-b);
+    let html = `<button data-p="${p-1}" ${p===1?"disabled":""} aria-label="이전 페이지">‹</button>`, prev = 0;
+    for (const x of nums){
+      if (x - prev > 1) html += `<span class="gap">…</span>`;
+      html += `<button data-p="${x}" ${x===p?'aria-current="page"':""}>${x}</button>`; prev = x;
+    }
+    html += `<button data-p="${p+1}" ${p===pages?"disabled":""} aria-label="다음 페이지">›</button>`;
+    $("#pager").innerHTML = html;
+  }
+  if (scroll) $("#count").scrollIntoView({block:"start"});
+}
+$("#pager").addEventListener("click", e => { const b = e.target.closest("button[data-p]"); if (b && !b.disabled) showPage(+b.dataset.p, true); });
+// 화면 폭이 모바일↔PC로 바뀌면 같은 필터로 다시 그림
+mobileMQ.addEventListener ? mobileMQ.addEventListener("change", renderList) : mobileMQ.addListener(renderList);
 
 function table(rows, cols, labels, limit){
   if (!rows || !rows.length) return "";
@@ -238,10 +307,11 @@ function renderDetail(n){
 }
 
 function route(){
-  const k = location.hash.slice(1), n = byKey[k];
+  const k = location.hash.slice(1), n = byKey[k], wasList = !$("#listView").hidden;
+  if (n && wasList) view.scrollY = window.scrollY;
   $("#listView").hidden = !!n; $("#detailView").hidden = !n;
   if (n){ renderDetail(n); document.title = n.공고명 + " · 공공주택 모집공고"; window.scrollTo(0,0); }
-  else { document.title = "공공주택 모집공고"; }
+  else { document.title = "공공주택 모집공고"; if (!wasList) window.scrollTo(0, view.scrollY); }
 }
 
 // init
