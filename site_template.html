@@ -102,6 +102,8 @@ td.wrap{white-space:normal;min-width:180px}
 .kv{display:grid;grid-template-columns:90px 1fr;gap:6px 12px;font-size:14px}
 .kv dt{color:var(--muted)}
 .kv dd{margin:0;overflow-wrap:anywhere}
+.visits{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-variant-numeric:tabular-nums}
+.visits b{color:var(--ink);font-weight:600}
 footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px solid var(--line)}
 @media (max-width:620px){
   .filters{grid-template-columns:1fr 1fr}
@@ -111,6 +113,7 @@ footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px so
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+<!--__ANALYTICS__-->
 </head>
 <body>
 <header><div class="wrap">
@@ -148,12 +151,14 @@ footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px so
 </main>
 
 <footer><div class="wrap">
+  <div class="visits" id="visits" hidden></div>
   국토교통부 마이홈포털 · LH 청약플러스 · 한국부동산원 청약홈 공공데이터를 매일 모아 정리합니다.
   신청 자격과 일정은 바뀔 수 있으니 신청 전에 반드시 공고문 원문을 확인하세요.
 </div></footer>
 
 <script>
 const DATA = /*__DATA__*/null;
+const GC = /*__GC__*/"";   // GoatCounter 코드 (빈 값이면 방문 통계 끔)
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const items = DATA.items;
@@ -312,12 +317,35 @@ function renderDetail(n){
   $("#back").onclick = () => { history.length > 1 ? history.back() : (location.hash = ""); };
 }
 
+// 방문 기록: 목록은 "/", 공고 상세는 "/공고/<키>" 로 기록 (count.js 로드 전이면 잠시 기다림)
+function track(path, title){
+  if (!GC) return;
+  let tries = 0;
+  (function go(){
+    if (window.goatcounter && window.goatcounter.count) { try { window.goatcounter.count({path, title}); } catch(e){} }
+    else if (tries++ < 20) setTimeout(go, 250);
+  })();
+}
+// 하단 방문자 수: 오늘 / 이번 달 / 누적 (GoatCounter 설정에서 visitor counter 허용 필요)
+async function showVisits(){
+  if (!GC) return;
+  const base = `https://${GC}.goatcounter.com/counter/TOTAL.json`;
+  const mon = DATA.today.slice(0, 8) + "01";
+  const get = q => fetch(base + q).then(r => r.ok ? r.json() : null).then(j => j ? String(j.count).trim() : "0").catch(() => null);
+  const [d, m, t] = await Promise.all([get(`?start=${DATA.today}`), get(`?start=${mon}`), get("")]);
+  if (t === null) return;
+  const el = $("#visits");
+  el.innerHTML = `<span>오늘 방문 <b>${esc(d ?? "-")}</b></span><span>이번 달 <b>${esc(m ?? "-")}</b></span><span>누적 <b>${esc(t)}</b></span>`;
+  el.hidden = false;
+}
+
 function route(){
   const k = location.hash.slice(1), n = byKey[k], wasList = !$("#listView").hidden;
   if (n && wasList) view.scrollY = window.scrollY;
   $("#listView").hidden = !!n; $("#detailView").hidden = !n;
-  if (n){ renderDetail(n); document.title = n.공고명 + " · 공공주택 모집공고"; window.scrollTo(0,0); }
-  else { document.title = "공공주택 모집공고"; if (!wasList) window.scrollTo(0, view.scrollY); }
+  if (n){ renderDetail(n); document.title = n.공고명 + " · 공공주택 모집공고"; window.scrollTo(0,0); track("/공고/" + n.k, n.공고명); }
+  else { document.title = "공공주택 모집공고"; if (!wasList) window.scrollTo(0, view.scrollY); if (!route.done) track("/", "공고 목록"); }
+  route.done = true;
 }
 
 // init
@@ -354,7 +382,7 @@ $("#kind").onclick = e => {
 };
 $("#home").onclick = e => { e.preventDefault(); location.hash = ""; };
 window.addEventListener("hashchange", route);
-renderList(); route();
+renderList(); route(); showVisits();
 </script>
 </body>
 </html>

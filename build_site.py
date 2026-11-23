@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from collect_myhome import DATA, HERE, KST
 
 OUT = os.path.join(HERE, "site", "index.html")
+# 방문자 통계(GoatCounter) 코드. 예: "korea-lease" → https://korea-lease.goatcounter.com  (비워 두면 통계 끔)
+GOATCOUNTER = os.environ.get("GOATCOUNTER_CODE", "")
 
 
 def main():
@@ -26,7 +28,12 @@ def main():
                           "items": items}, ensure_ascii=False).replace("</", "<\\/")
     tpl = open(os.path.join(HERE, "site_template.html"), encoding="utf-8").read()
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    open(OUT, "w", encoding="utf-8").write(tpl.replace("/*__DATA__*/null", payload))
+    html = tpl.replace("/*__DATA__*/null", payload).replace("/*__GC__*/\"\"", json.dumps(GOATCOUNTER))
+    if GOATCOUNTER:
+        html = html.replace("<!--__ANALYTICS__-->",
+            '<script>window.goatcounter={no_onload:true}</script>\n'
+            f'<script data-goatcounter="https://{GOATCOUNTER}.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>')
+    open(OUT, "w", encoding="utf-8").write(html)
     print(f"site/index.html 생성: 공고 {len(items)}건, {os.path.getsize(OUT)//1024}KB")
 
 
