@@ -1,0 +1,346 @@
+"""인스타그램 릴스용 '이번 주 접수 시작' 영상 생성 (1080x1920, 30fps, 약 30초)
+
+사용법:  python3 make_video.py [기준일 YYYY-MM-DD]   (기본: 오늘, KST)
+결과:    video/reel_YYYYMMDD.mp4, video/caption_YYYYMMDD.txt
+필요:    ffmpeg, Pillow, 한글 글꼴(Noto Sans CJK KR)
+"""
+import json, os, re, subprocess, sys, shutil
+from datetime import datetime, date, timedelta
+from PIL import Image, ImageDraw, ImageFont
+from collect_myhome import DATA, HERE, KST
+
+W, H, FPS = 1080, 1920, 30
+SITE = "dia1117sq.github.io/korea-lease-notice"
+OUT = os.path.join(HERE, "video")
+TMP = os.path.join(OUT, "_tmp")
+
+# 사이트와 같은 색
+BG, SURF, INK, MUTED, LINE = (245, 246, 244), (255, 255, 255), (27, 35, 33), (95, 107, 103), (225, 229, 226)
+ACCENT, ACCENT_SOFT, BLUE, BLUE_SOFT, URGENT = (31, 107, 92), (227, 240, 236), (36, 89, 168), (230, 238, 250), (194, 54, 43)
+
+FONT_DIRS = ["/usr/share/fonts/opentype/noto", "/usr/share/fonts/noto-cjk", "/System/Library/Fonts"]
+
+
+def font(weight, size):
+    names = {"black": "NotoSansCJK-Black.ttc", "bold": "NotoSansCJK-Bold.ttc",
+             "medium": "NotoSansCJK-Medium.ttc", "regular": "NotoSansCJK-Regular.ttc"}
+    for d in FONT_DIRS:
+        p = os.path.join(d, names[weight])
+        if os.path.exists(p):
+            return ImageFont.truetype(p, size, index=1)   # index 1 = KR
+    raise SystemExit("한글 글꼴(Noto Sans CJK)을 찾을 수 없습니다")
+
+
+SHORT = {"서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "광주",
+         "대전광역시": "대전", "울산광역시": "울산", "세종특별자치시": "세종", "경기도": "경기", "강원특별자치도": "강원",
+         "충청북도": "충북", "충청남도": "충남", "전북특별자치도": "전북", "전라남도": "전남",
+         "전남광주통합특별시": "전남·광주", "경상북도": "경북", "경상남도": "경남", "제주특별자치도": "제주"}
+WD = "월화수목금토일"
+
+
+def md(s):
+    d = s if isinstance(s, date) else date.fromisoformat(s)
+    return f"{d.month}.{d.day}({WD[d.weekday()]})"
+
+
+def man(v):
+    v = int(v or 0)
+    if v >= 100_000_000:
+        e, m = divmod(v, 100_000_000)
+        return f"{e}억" + (f" {round(m / 10000):,}만" if m >= 10000 else "") + "원"
+    if v >= 100_000:
+        return f"{round(v / 10000):,}만원"
+    return f"{v / 10000:.1f}만원".replace(".0만", "만")
+
+
+def clean_title(t):
+    t = re.sub(r"\[[^\]]*\]", "", t)
+    t = re.sub(r"\(\s*['‘’]?\d{2,4}[.\s]\d{1,2}[.\s]?\d{0,2}\.?\s*\)", "", t)
+    t = re.sub(r"\s+", " ", t).strip(" -_")
+    return t
+
+
+def is_public(n):
+    t = n.get("유형") or ""
+    if "민영" in t or "임의공급" in t or "잔여세대" in t or "오피스텔" in t:
+        return False
+    org = n.get("공급기관") or ""
+    return org == "LH" or "공사" in org or any(k in t for k in ("국민", "공공", "임대", "행복", "영구"))
+
+
+def pick(items, start, end, k=5):
+    c = [n for n in items if n["접수상태"] == "접수예정" and n["접수시작"] and start <= n["접수시작"] <= end and is_public(n)]
+    c.sort(key=lambda n: -(n["총공급호수"] or 0))
+    out, seen = [], set()
+    for n in c:
+        if n["시도"] in seen:
+            continue
+        out.append(n); seen.add(n["시도"])
+        if len(out) == k:
+            break
+    # 임대·분양이 한쪽으로만 몰리면 한 자리 교체
+    kinds = {n["구분"] for n in out}
+    if len(kinds) == 1 and len(out) == k:
+        other = next((n for n in c if n["구분"] not in kinds and n["시도"] not in {x["시도"] for x in out[:-1]}), None)
+        if other:
+            out[-1] = other
+    return out
+
+
+def rent_text(n):
+    dep = [d.get("임대보증금") for d in n.get("단지", []) if d.get("임대보증금")]
+    mon = [d.get("월임대료") for d in n.get("단지", []) if d.get("월임대료")]
+    if not dep and not mon:
+        return None
+    s = []
+    if dep: s.append(f"보증금 {man(min(dep))}" + ("~" if len(set(dep)) > 1 else ""))
+    if mon: s.append(f"월 {man(min(mon))}" + ("~" if len(set(mon)) > 1 else ""))
+    return " · ".join(s)
+
+
+# ---------- 그리기 도구 ----------
+def wrap(draw, text, f, maxw, max_lines):
+    words, lines, cur = text.split(" "), [], ""
+    for w in words:
+        t = (cur + " " + w).strip()
+        if draw.textlength(t, font=f) <= maxw:
+            cur = t; continue
+        if cur: lines.append(cur)
+        cur = w
+        while draw.textlength(cur, font=f) > maxw:       # 띄어쓰기 없는 긴 단어는 글자 단위로
+            i = len(cur)
+            while draw.textlength(cur[:i], font=f) > maxw: i -= 1
+            lines.append(cur[:i]); cur = cur[i:]
+    if cur: lines.append(cur)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while draw.textlength(lines[-1] + "…", font=f) > maxw: lines[-1] = lines[-1][:-1]
+        lines[-1] += "…"
+    return lines
+
+
+def layer(w, h):
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    return im, ImageDraw.Draw(im)
+
+
+def text_layer(lines, f, color, gap=1.25):
+    asc, desc = f.getmetrics(); lh = int((asc + desc) * gap)
+    tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    wmax = max(int(tmp.textlength(l, font=f)) for l in lines) + 4
+    im, d = layer(wmax, lh * len(lines))
+    for i, l in enumerate(lines):
+        d.text((0, i * lh), l, font=f, fill=color)
+    return im
+
+
+def pill_layer(text, f, fg, bg, padx=28, pady=14, r=16):
+    tmp = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    tw = int(tmp.textlength(text, font=f)); asc, desc = f.getmetrics()
+    im, d = layer(tw + padx * 2, asc + desc + pady * 2)
+    d.rounded_rectangle([0, 0, im.width - 1, im.height - 1], r, fill=bg)
+    d.text((padx, pady), text, font=f, fill=fg)
+    return im
+
+
+def ease(x):
+    x = max(0.0, min(1.0, x)); return 1 - (1 - x) ** 3
+
+
+class Scene:
+    """배경 + (레이어, x, y, 등장시각) 목록. 레이어는 0.45초 동안 아래에서 떠오르며 나타남."""
+    def __init__(self, dur, bg):
+        self.dur, self.bg, self.items, self.dynamic = dur, Image.new("RGBA", (W, H), bg + (255,)), [], []
+
+    def add(self, im, x, y, at=0.0, rise=36):
+        self.items.append((im, x, y, at, rise)); return im
+
+    def frame(self, t):
+        f = self.bg.copy()
+        for im, x, y, at, rise in self.items:
+            p = ease((t - at) / 0.45)
+            if p <= 0: continue
+            if p < 1:
+                a = im.copy(); a.putalpha(a.getchannel("A").point(lambda v: int(v * p)))
+                f.alpha_composite(a, (int(x), int(y + rise * (1 - p))))
+            else:
+                f.alpha_composite(im, (int(x), int(y)))
+        for fn in self.dynamic:
+            fn(f, t)
+        return f.convert("RGB")
+
+    def settled(self):
+        return max([at + 0.45 for _, _, _, at, _ in self.items] + [0]) if not self.dynamic else self.dur
+
+    def render(self, path):
+        tmp = path[:-4] + ".part.mp4"
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
+               "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+               "-pix_fmt", "yuv420p", "-r", str(FPS), tmp]
+        pr = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        n, still, cut = round(self.dur * FPS), None, self.settled()
+        for i in range(n):
+            t = i / FPS
+            if t >= cut + 1 / FPS:
+                still = still or self.frame(t).tobytes()
+                pr.stdin.write(still)
+            else:
+                pr.stdin.write(self.frame(t).tobytes())
+        pr.stdin.close()
+        if pr.wait() != 0:
+            raise SystemExit(f"ffmpeg 실패: {path}")
+        os.replace(tmp, path)
+
+
+# ---------- 장면 ----------
+M = 90   # 좌우 여백 (인스타그램 UI를 피해 위 240px, 아래 380px 안쪽에 내용 배치)
+
+
+def scene_hook(start, end, total, picks):
+    s = Scene(3.5, ACCENT)
+    y = 340
+    pl = s.add(pill_layer(f"{md(start)} ~ {md(end)}", font("bold", 42), ACCENT, (255, 255, 255, 235)), M, y, 0.0)
+    y += pl.height + 50
+    tl = s.add(text_layer(["이번 주", "접수 시작하는", "공공주택"], font("black", 120), (255, 255, 255), 1.18), M, y, 0.15)
+    y += tl.height + 10
+    num_f, unit_f = font("black", 240), font("black", 100)
+    ny = y
+
+    def counter(f, t):   # 숫자 카운트업
+        p = ease((t - 0.55) / 0.9)
+        if p <= 0: return
+        d = ImageDraw.Draw(f)
+        val = f"{round(total * p)}"
+        d.text((M - 8, ny), val, font=num_f, fill=(255, 255, 255))
+        x = M + d.textlength(val, font=num_f) + 16
+        d.text((x, ny + 150), "건", font=unit_f, fill=(255, 255, 255))
+    s.dynamic.append(counter)
+    s.add(text_layer(["그중 규모 큰 공고 5곳을 골랐어요"], font("medium", 50), (210, 232, 225)), M, ny + 330, 1.2)
+    return s
+
+
+def scene_card(i, n, today):
+    s = Scene(4.5, BG)
+    is_rent = n["구분"] == "임대"
+    col, soft = (ACCENT, ACCENT_SOFT) if is_rent else (BLUE, BLUE_SOFT)
+    # 진행 표시
+    prog, d = layer(W - 2 * M, 60)
+    d.text((0, 0), f"{i:02d}", font=font("black", 44), fill=col)
+    d.text((62, 6), "/ 05", font=font("medium", 36), fill=MUTED)
+    for k in range(5):
+        x0 = 220 + k * 120
+        d.rounded_rectangle([x0, 24, x0 + 104, 32], 4, fill=col if k < i else LINE)
+    s.add(prog, M, 280, 0.0, rise=0)
+    # 구분 칩 + D-day
+    typ = (n.get("유형") or "").replace("APT 국민", "공공분양(국민주택)").replace("APT", "아파트").strip()
+    chip = pill_layer(f"{n['구분']} · {typ}", font("bold", 42), col, soft)
+    s.add(chip, M, 400, 0.05)
+    dd = (date.fromisoformat(n["접수시작"]) - today).days
+    s.add(pill_layer("내일 접수 시작" if dd == 1 else f"접수 D-{dd}" if dd > 0 else "오늘 접수 시작",
+                     font("bold", 42), (255, 255, 255), URGENT), M + chip.width + 18, 400, 0.05)
+    # 지역 + 공고명
+    region = SHORT.get(n["시도"], n["시도"])
+    if n.get("시군구") and len(n.get("단지", [])) <= 1: region += " " + n["시군구"]
+    s.add(text_layer([region], font("bold", 54), MUTED), M, 535, 0.12)
+    tmpd = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
+    tf = font("black", 84)
+    lines = wrap(tmpd, clean_title(n["공고명"]), tf, W - 2 * M, 3)
+    title = s.add(text_layer(lines, tf, INK, 1.22), M, 620, 0.18)
+    # 정보 카드
+    rows = []
+    if n.get("총공급호수"): rows.append(("공급", f"{int(n['총공급호수']):,}호"))
+    far = n["접수마감"] and n["접수마감"] > (today + timedelta(days=60)).isoformat()
+    rows.append(("접수", md(n["접수시작"]) + ("부터" if far else f" ~ {md(n['접수마감'])}" if n["접수마감"] and n["접수마감"] != n["접수시작"] else "")))
+    if is_rent:
+        dep = [d.get("임대보증금") for d in n.get("단지", []) if d.get("임대보증금")]
+        mon = [d.get("월임대료") for d in n.get("단지", []) if d.get("월임대료")]
+        if dep: rows.append(("보증금", man(min(dep)) + ("부터" if len(set(dep)) > 1 else "")))
+        if mon: rows.append(("월 임대료", man(min(mon)) + ("부터" if len(set(mon)) > 1 else "")))
+    ann = n.get("당첨발표")
+    if ann and n["접수시작"] <= ann <= (date.fromisoformat(n["접수시작"]) + timedelta(days=120)).isoformat():
+        rows.append(("당첨 발표", md(ann)))
+    if n.get("공급기관"): rows.append(("공급기관", n["공급기관"][:20]))
+    rows = rows[:5]
+    lab, val = font("medium", 40), font("bold", 50)
+    rh = 118
+    card, d = layer(W - 2 * M, 44 + rh * len(rows))
+    d.rounded_rectangle([0, 0, card.width - 1, card.height - 1], 28, fill=SURF, outline=LINE, width=2)
+    for k, (a, b) in enumerate(rows):
+        y = 22 + k * rh
+        if k: d.line([40, y, card.width - 40, y], fill=LINE, width=2)
+        d.text((44, y + 34), a, font=lab, fill=MUTED)
+        vv = b
+        while d.textlength(vv, font=val) > card.width - 290 and len(vv) > 4: vv = vv[:-2] + "…"
+        d.text((250, y + 28), vv, font=val, fill=INK)
+    top = 620 + title.height + 50
+    s.add(card, M, top, 0.3)
+    s.add(text_layer(["자격·조건은 사이트에서 확인하세요"], font("medium", 40), MUTED), M, top + card.height + 44, 0.5)
+    return s
+
+
+def scene_cta(more):
+    s = Scene(4.0, ACCENT)
+    y = 360
+    if more > 0:
+        a = s.add(text_layer([f"이번 주 공고 {more}건 더 있어요"], font("bold", 56), (210, 232, 225)), M, y, 0.0)
+        y += a.height + 30
+    b = s.add(text_layer(["전국 공공임대·분양", "모집공고 한눈에"], font("black", 104), (255, 255, 255), 1.22), M, y, 0.12)
+    y += b.height + 24
+    c = s.add(text_layer(["매일 아침 자동 업데이트 · 마감 임박순"], font("medium", 46), (210, 232, 225)), M, y, 0.25)
+    y += c.height + 70
+    box, d = layer(W - 2 * M, 250)
+    d.rounded_rectangle([0, 0, box.width - 1, box.height - 1], 30, fill=(255, 255, 255))
+    d.text((48, 42), "프로필 링크에서 바로 보기", font=font("black", 62), fill=ACCENT)
+    uf = 44
+    while ImageDraw.Draw(box).textlength(SITE, font=font("bold", uf)) > box.width - 96: uf -= 2
+    d.text((48, 156), SITE, font=font("bold", uf), fill=MUTED)
+    s.add(box, M, y, 0.4)
+    y += box.height + 50
+    s.add(text_layer(["저장해두고 신청 일정 놓치지 마세요"], font("medium", 46), (255, 255, 255)), M, y, 0.6)
+    return s
+
+
+def caption(picks, start, end, total):
+    L = [f"📢 이번 주({md(start)}~{md(end)}) 접수 시작하는 공공주택 {total}건 중 규모 큰 5곳", ""]
+    for k, n in enumerate(picks, 1):
+        ln = f"{k}. [{SHORT.get(n['시도'], n['시도'])}] {clean_title(n['공고명'])}"
+        ln += f" — {n['총공급호수']:,}호" if n.get("총공급호수") else ""
+        L.append(ln)
+        far = n["접수마감"] and n["접수마감"] > (date.fromisoformat(n["접수시작"]) + timedelta(days=60)).isoformat()
+        L.append(f"   접수 {md(n['접수시작'])}" + ("부터 (선착순)" if far else f" ~ {md(n['접수마감'])}" if n["접수마감"] and n["접수마감"] != n["접수시작"] else ""))
+    L += ["", "전체 공고와 자격 조건은 프로필 링크에서 확인하세요 👉 " + SITE, "",
+          "※ 공공데이터(마이홈·LH·청약홈) 기준이며, 신청 전 공고문 원문을 꼭 확인하세요.", "",
+          "#공공임대 #국민임대 #행복주택 #공공분양 #청약 #LH청약 #임대주택 #청약정보 #내집마련 #주거복지"]
+    return "\n".join(L)
+
+
+def main():
+    today = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.now(KST).date()
+    start, end = today + timedelta(days=1), today + timedelta(days=7)
+    items = json.load(open(os.path.join(DATA, "merged.json"), encoding="utf-8"))["items"]
+    week = [n for n in items if n["접수상태"] == "접수예정" and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]
+    picks = pick(items, start.isoformat(), end.isoformat())
+    if len(picks) < 3:
+        raise SystemExit(f"소개할 공고가 부족합니다 ({len(picks)}건)")
+    os.makedirs(TMP, exist_ok=True)
+    scenes = [scene_hook(start, end, len(week), picks)] + \
+             [scene_card(i, n, today) for i, n in enumerate(picks, 1)] + [scene_cta(max(0, len(week) - len(picks)))]
+    files = []
+    for k, sc in enumerate(scenes):
+        p = os.path.join(TMP, f"s{k:02d}.mp4"); sc.render(p); files.append(p)
+        print(f"장면 {k + 1}/{len(scenes)} 완료")
+    lst = os.path.join(TMP, "list.txt")
+    open(lst, "w").write("".join(f"file '{f}'\n" for f in files))
+    tag = today.strftime("%Y%m%d")
+    out = os.path.join(OUT, f"reel_{tag}.mp4"); part = out[:-4] + ".part.mp4"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst,
+                    "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-c:v", "copy", "-c:a", "aac",
+                    "-shortest", "-movflags", "+faststart", part], check=True)
+    os.replace(part, out)
+    open(os.path.join(OUT, f"caption_{tag}.txt"), "w", encoding="utf-8").write(caption(picks, start, end, len(week)))
+    shutil.rmtree(TMP, ignore_errors=True)
+    print("완성:", out)
+
+
+if __name__ == "__main__":
+    main()

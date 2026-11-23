@@ -4,3 +4,4 @@ data/*.csv
 data/.old
 data/.merged_prev.json
 site/
+video/
