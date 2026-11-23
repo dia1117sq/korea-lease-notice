@@ -344,7 +344,8 @@ def scene_card(i, n, today, photo=None, total=5):
         d.text((250, y + 28), vv, font=val, fill=INK)
     top = 620 + title.height + 50
     s.add(card, M, top, 0.3)
-    s.add(text_layer(["자격·조건은 사이트에서 확인하세요"], font("medium", 40), sub_col), M, top + card.height + 44, 0.5)
+    if top + card.height + 44 < 1450:   # 인스타그램 하단 캡션 영역(약 1500px 아래)과 겹치지 않을 때만
+        s.add(text_layer(["자격·조건은 사이트에서 확인하세요"], font("medium", 40), sub_col), M, top + card.height + 44, 0.5)
     return s
 
 
