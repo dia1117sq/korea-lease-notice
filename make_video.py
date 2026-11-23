@@ -71,7 +71,7 @@ def is_public(n):
 
 def pick(items, start, end, k=10):
     """이번 주 접수 시작 공공주택을 공급 규모순으로 k개. 1차로 시·도가 겹치지 않게 고르고, 모자라면 규모순으로 채움."""
-    c = [n for n in items if n["접수상태"] == "접수예정" and n["접수시작"] and start <= n["접수시작"] <= end and is_public(n)]
+    c = [n for n in items if n["접수상태"] in ("접수예정", "접수중") and n["접수시작"] and start <= n["접수시작"] <= end and is_public(n)]
     c.sort(key=lambda n: -(n["총공급호수"] or 0))
     out, seen = [], set()
     for n in c:
@@ -400,9 +400,9 @@ def caption(picks, start, end, total, part=1, parts=1, offset=0):
 
 def main():
     today = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.now(KST).date()
-    start, end = today + timedelta(days=1), today + timedelta(days=7)
+    start, end = today, today + timedelta(days=6)   # 월요일 게시 기준: 월~일
     items = json.load(open(os.path.join(DATA, "merged.json"), encoding="utf-8"))["items"]
-    week = [n for n in items if n["접수상태"] == "접수예정" and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]
+    week = [n for n in items if n["접수상태"] in ("접수예정", "접수중") and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]
     picks = pick(items, start.isoformat(), end.isoformat(), k=10)
     if len(picks) < 3:
         raise SystemExit(f"소개할 공고가 부족합니다 ({len(picks)}건)")

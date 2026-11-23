@@ -1,0 +1,95 @@
+# 매주 월요일: 최신 공고 수집 → 릴스 2편 생성 → 사이트에 영상 공개 → 07:00 PART 1, 07:10 PART 2 인스타그램 게시
+name: weekly-reels
+
+on:
+  schedule:
+    - cron: "20 21 * * 0"    # UTC 일 21:20 = KST 월 06:20 (GitHub 예약은 몇 분~수십 분 늦을 수 있어 미리 시작)
+  workflow_dispatch:
+    inputs:
+      post:
+        description: "인스타그램에 실제로 게시 (false면 영상만 만들고 미리보기)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [".github/workflows/weekly-reels.yml", "post_reels.py"]   # 설정을 바꾸면 게시 없이 시험 실행
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-update        # 매일 사이트 갱신 작업과 겹치지 않게 순서대로 실행
+  cancel-in-progress: false
+
+jobs:
+  reels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+      TZ: Asia/Seoul
+      SITE_URL: https://dia1117sq.github.io/korea-lease-notice
+      # 예약 실행이거나, 수동 실행에서 '게시'를 체크했을 때만 실제 게시
+      DRY_RUN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.post)) && '0' || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 글꼴·도구 설치
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-noto-cjk ffmpeg > /dev/null
+          pip install -q pillow
+
+      - name: 최신 공고 수집
+        continue-on-error: true
+        run: |
+          python collect_myhome.py
+          python collect_lh.py
+          python enrich_lh_supply.py 300
+          python collect_applyhome.py
+      - name: 통합·사이트·영상 생성
+        run: |
+          python merge.py
+          python build_site.py
+          python make_video.py "$(date +%F)"
+          mkdir -p site/reels
+          cp video/*.mp4 site/reels/
+          ls -la site/reels
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 인스타그램 게시 (07:00 PART 1, 07:10 PART 2)
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          T=$(date +%Y%m%d)
+          sleep 30   # 사이트 반영 대기
+          ARGS=()
+          if [ -f "video/reel_${T}_1.mp4" ]; then
+            ARGS+=("$SITE_URL/reels/reel_${T}_1.mp4|video/caption_${T}_1.txt|07:00")
+            [ -f "video/reel_${T}_2.mp4" ] && ARGS+=("$SITE_URL/reels/reel_${T}_2.mp4|video/caption_${T}_2.txt|07:10")
+          else
+            ARGS+=("$SITE_URL/reels/reel_${T}.mp4|video/caption_${T}.txt|07:00")
+          fi
+          python post_reels.py "${ARGS[@]}"
+
+      - name: 영상·캡션 보관 (Actions 실행 화면에서 내려받기)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reels
+          path: video/
+          retention-days: 30
