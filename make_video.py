@@ -4,9 +4,9 @@
 결과:    video/reel_YYYYMMDD.mp4, video/caption_YYYYMMDD.txt
 필요:    ffmpeg, Pillow, 한글 글꼴(Noto Sans CJK KR)
 """
-import json, os, re, subprocess, sys, shutil
+import json, os, random, re, subprocess, sys, shutil
 from datetime import datetime, date, timedelta
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageOps
 from collect_myhome import DATA, HERE, KST
 
 W, H, FPS = 1080, 1920, 30
@@ -386,7 +386,14 @@ def main():
     os.makedirs(TMP, exist_ok=True)
     make_label()
     bgs = load_backgrounds()
-    bg = (lambda k: bgs[k % len(bgs)]) if bgs else (lambda k: None)
+    # 날짜로 섞어서 매번 다른 조합, 한 영상 안에서는 겹치지 않게. 절반은 좌우 반전으로 변화를 더함.
+    rng = random.Random(today.toordinal())
+    order = list(range(len(bgs))); rng.shuffle(order)
+    flips = [rng.random() < 0.5 for _ in range(16)]
+    def bg(k):
+        if not bgs: return None
+        im = bgs[order[k % len(bgs)]]
+        return ImageOps.mirror(im) if flips[k % 16] else im
     scenes = [scene_hook(start, end, len(week), picks, bg(0))] + \
              [scene_card(i, n, today, bg(i)) for i, n in enumerate(picks, 1)] + \
              [scene_cta(max(0, len(week) - len(picks)), bg(len(picks) + 1))]
