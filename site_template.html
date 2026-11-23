@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>공공주택 모집공고</title>
+<meta name="description" content="전국 공공임대·공공분양·청약 모집공고 일정과 조건을 한곳에서 확인하세요.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* 레이아웃: 좁은 단일 컬럼 목록 → 클릭 시 같은 페이지에서 상세 보기 (#해시 라우팅) */
+:root{
+  --bg:#f5f6f4; --surface:#ffffff; --ink:#1b2321; --muted:#5f6b67; --line:#e1e5e2;
+  --accent:#1f6b5c; --accent-soft:#e3f0ec;
+  --open:#17803d; --open-soft:#e4f4e9; --soon:#2459a8; --soon-soft:#e6eefa;
+  --closed:#7b8582; --closed-soft:#eef0ef; --urgent:#c2362b;
+  --font:"IBM Plex Sans KR",-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121615; --surface:#1a201e; --ink:#e7ecea; --muted:#9aa6a2; --line:#2a3330;
+  --accent:#5cc2aa; --accent-soft:#1d332d;
+  --open:#5fd18a; --open-soft:#18301f; --soon:#7fa8ef; --soon-soft:#1b2640;
+  --closed:#8b9592; --closed-soft:#232a28; --urgent:#ff7b6e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121615; --surface:#1a201e; --ink:#e7ecea; --muted:#9aa6a2; --line:#2a3330;
+  --accent:#5cc2aa; --accent-soft:#1d332d;
+  --open:#5fd18a; --open-soft:#18301f; --soon:#7fa8ef; --soon-soft:#1b2640;
+  --closed:#8b9592; --closed-soft:#232a28; --urgent:#ff7b6e; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+.wrap{max-width:860px;margin:0 auto;padding:0 16px}
+header{background:var(--surface);border-bottom:1px solid var(--line)}
+header .wrap{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;padding-top:20px;padding-bottom:16px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}
+h1 a{color:inherit;text-decoration:none}
+.updated{color:var(--muted);font-size:13px}
+.summary{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:110px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:13px}
+.filters{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;margin-bottom:10px}
+.filters input,.filters select{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
+.filters input:focus,.filters select:focus,.seg button:focus-visible,.row:focus-visible,.btn:focus-visible,.back:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.seg button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.count{color:var(--muted);font-size:13px;margin:0 0 8px}
+.list{display:flex;flex-direction:column;gap:8px;padding-bottom:40px}
+.row{display:grid;grid-template-columns:86px 1fr;gap:14px;align-items:start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;text-decoration:none;color:inherit;cursor:pointer}
+.row:hover{border-color:var(--accent)}
+.when{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.pill{display:inline-block;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.p-open{background:var(--open-soft);color:var(--open)}
+.p-soon{background:var(--soon-soft);color:var(--soon)}
+.p-closed{background:var(--closed-soft);color:var(--closed)}
+.dday{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--muted)}
+.dday.hot{color:var(--urgent)}
+.title{font-weight:600;font-size:15.5px;margin:0 0 4px;text-wrap:balance;word-break:keep-all;overflow-wrap:anywhere}
+.meta{color:var(--muted);font-size:13.5px;display:flex;gap:4px 10px;flex-wrap:wrap}
+.tag{color:var(--accent);font-weight:600}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:28px;text-align:center;color:var(--muted)}
+/* 상세 */
+.detail{padding:18px 0 48px}
+.back{font:inherit;font-size:14px;background:none;border:0;color:var(--accent);cursor:pointer;padding:6px 0;margin-bottom:8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:12px}
+.card h2{font-size:20px;line-height:1.4;margin:8px 0 10px;text-wrap:balance;word-break:keep-all}
+.card h3{font-size:15px;margin:0 0 12px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--muted)}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.btn{display:inline-block;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;padding:9px 14px;border:1px solid var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--surface)}
+.dates{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.date{border-left:3px solid var(--line);padding:2px 0 2px 10px}
+.date.key{border-left-color:var(--accent)}
+.date span{display:block;color:var(--muted);font-size:12.5px}
+.date b{font-variant-numeric:tabular-nums;font-weight:600}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+th{color:var(--muted);font-weight:500;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+td.wrap{white-space:normal;min-width:180px}
+.more{font:inherit;font-size:13.5px;margin-top:8px;background:none;border:1px solid var(--line);border-radius:8px;padding:6px 12px;color:var(--ink);cursor:pointer}
+.note{color:var(--muted);font-size:13px;margin:0}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:6px 12px;font-size:14px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px solid var(--line)}
+@media (max-width:620px){
+  .filters{grid-template-columns:1fr 1fr}
+  .filters input{grid-column:1/-1}
+  .row{grid-template-columns:1fr;gap:6px}
+  .when{flex-direction:row;align-items:center;gap:8px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1><a href="#" id="home">공공주택 모집공고</a></h1>
+  <div class="updated" id="updated"></div>
+</div></header>
+
+<main class="wrap">
+  <section id="listView">
+    <div class="summary" id="summary"></div>
+    <div class="filters">
+      <input id="q" type="search" placeholder="공고명·단지명·지역 검색" aria-label="검색">
+      <select id="sido" aria-label="지역"></select>
+      <select id="type" aria-label="유형"></select>
+      <select id="sort" aria-label="정렬">
+        <option value="deadline">마감 임박순</option>
+        <option value="recent">최신 공고순</option>
+        <option value="size">공급 많은순</option>
+      </select>
+    </div>
+    <div class="seg" id="kind" role="group" aria-label="구분">
+      <button data-v="" aria-pressed="true">전체</button>
+      <button data-v="임대" aria-pressed="false">임대</button>
+      <button data-v="분양" aria-pressed="false">분양</button>
+      <span style="width:8px"></span>
+      <button data-s="접수중" aria-pressed="true">접수중</button>
+      <button data-s="접수예정" aria-pressed="true">접수예정</button>
+      <button data-s="접수마감" aria-pressed="false">마감</button>
+    </div>
+    <p class="count" id="count"></p>
+    <div class="list" id="list"></div>
+  </section>
+  <section id="detailView" class="detail" hidden></section>
+</main>
+
+<footer><div class="wrap">
+  국토교통부 마이홈포털 · LH 청약플러스 · 한국부동산원 청약홈 공공데이터를 매일 모아 정리합니다.
+  신청 자격과 일정은 바뀔 수 있으니 신청 전에 반드시 공고문 원문을 확인하세요.
+</div></footer>
+
+<script>
+const DATA = /*__DATA__*/null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const items = DATA.items;
+const byKey = Object.fromEntries(items.map(n => [n.k, n]));
+const state = {q:"", sido:"", type:"", kind:"", st:new Set(["접수중","접수예정"]), sort:"deadline"};
+
+function dday(n){
+  const t = new Date(DATA.today), d = s => s ? Math.round((new Date(s) - t)/864e5) : null;
+  if (n.접수상태 === "접수예정"){ const x = d(n.접수시작); return x == null ? "" : `시작 D-${x}`; }
+  if (n.접수상태 === "접수중"){ const x = d(n.접수마감); return x == null ? "" : (x === 0 ? "오늘 마감" : `마감 D-${x}`); }
+  return "";
+}
+const pill = s => `<span class="pill ${s==="접수중"?"p-open":s==="접수예정"?"p-soon":"p-closed"}">${esc(s)}</span>`;
+const md = s => s ? s.slice(5).replace("-", ".") : "";
+const period = n => (n.접수시작 || n.접수마감) ? `${md(n.접수시작)}${n.접수시작&&n.접수마감&&n.접수시작!==n.접수마감?" ~ "+md(n.접수마감):(!n.접수시작?"~ "+md(n.접수마감):"")}` : "";
+const region = n => [n.시도, n.시군구].filter(Boolean).join(" ");
+const typeOf = n => (n.유형 || "").trim() || n.구분;
+const won = v => { v = Number(v); if (!v) return ""; if (v >= 1e8){ const e=Math.floor(v/1e8), m=Math.round((v%1e8)/1e4); return `${e}억${m?" "+m.toLocaleString()+"만":""}원`; } return `${Math.round(v/1e4).toLocaleString()}만원`; };
+
+function fillSelect(el, label, vals){
+  el.innerHTML = `<option value="">${label}</option>` + vals.map(v => `<option>${esc(v)}</option>`).join("");
+}
+function counts(){ return {open:items.filter(n=>n.접수상태==="접수중").length, soon:items.filter(n=>n.접수상태==="접수예정").length,
+  today:items.filter(n=>n.접수상태==="접수중" && n.접수마감===DATA.today).length}; }
+
+function renderList(){
+  const q = state.q.trim().toLowerCase();
+  let r = items.filter(n => state.st.has(n.접수상태)
+    && (!state.kind || n.구분 === state.kind)
+    && (!state.sido || n.시도 === state.sido)
+    && (!state.type || typeOf(n) === state.type)
+    && (!q || [n.공고명, region(n), n.공급기관, typeOf(n), ...(n.단지||[]).map(d=>d.단지명+" "+d.주소)].join(" ").toLowerCase().includes(q)));
+  const rank = {"접수중":0, "접수예정":1, "접수마감":2};
+  const day = n => n.접수상태==="접수중" ? n.접수마감 : n.접수상태==="접수예정" ? (n.접수시작 || "9999") : (n.접수마감 || "");
+  const cmp = (x, y) => x < y ? -1 : x > y ? 1 : 0;
+  if (state.sort === "deadline") r.sort((a,b) => (rank[a.접수상태]-rank[b.접수상태]) || (a.접수상태==="접수마감" ? cmp(day(b),day(a)) : cmp(day(a),day(b))));
+  if (state.sort === "recent") r.sort((a,b) => cmp(b.모집공고일||"", a.모집공고일||""));
+  if (state.sort === "size") r.sort((a,b) => (b.총공급호수||0) - (a.총공급호수||0));
+  $("#count").textContent = `${r.length.toLocaleString()}건`;
+  $("#list").innerHTML = r.length ? r.map(n => {
+    const dd = dday(n), hot = /오늘|D-[0-3]$/.test(dd) && n.접수상태==="접수중";
+    return `<a class="row" href="#${n.k}">
+      <div class="when">${pill(n.접수상태)}<span class="dday${hot?" hot":""}">${esc(dd)}</span></div>
+      <div><p class="title">${esc(n.공고명)}</p>
+        <div class="meta"><span class="tag">${esc(n.구분)} · ${esc(typeOf(n))}</span><span>${esc(region(n))}</span>
+        ${n.총공급호수?`<span>${Number(n.총공급호수).toLocaleString()}호</span>`:""}<span>${esc(n.공급기관||"")}</span>
+        ${period(n)?`<span>접수 ${esc(period(n))}</span>`:""}</div></div></a>`; }).join("")
+    : `<div class="empty">조건에 맞는 공고가 없습니다. 검색어나 필터를 바꿔 보세요.</div>`;
+}
+
+function table(rows, cols, labels, limit){
+  if (!rows || !rows.length) return "";
+  const id = "t" + Math.random().toString(36).slice(2,8);
+  const body = (lim) => rows.slice(0, lim).map(r => `<tr>${cols.map(c => `<td class="${/주소|단지명/.test(c)?"wrap":""}">${esc(r[c] ?? "")}</td>`).join("")}</tr>`).join("");
+  const more = rows.length > limit ? `<button class="more" data-t="${id}">전체 ${rows.length}개 보기</button>` : "";
+  setTimeout(() => { const b = document.querySelector(`[data-t="${id}"]`); if (b) b.onclick = () => { document.getElementById(id).innerHTML = body(rows.length); b.remove(); }; });
+  return `<div class="tbl"><table><thead><tr>${(labels||cols).map(c=>`<th>${esc(c)}</th>`).join("")}</tr></thead><tbody id="${id}">${body(limit)}</tbody></table></div>${more}`;
+}
+
+function renderDetail(n){
+  const sched = n.청약일정 || {};
+  const dates = [
+    ["모집공고일", n.모집공고일], ["접수 기간", [n.접수시작, n.접수마감].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(" ~ "), true],
+    ["특별공급", sched["특별공급접수"]], ["1순위(해당지역)", sched["1순위(해당지역)"]], ["2순위(해당지역)", sched["2순위(해당지역)"]],
+    ["당첨자 발표", n.당첨발표, true], ["계약", sched["계약"]], ["입주 예정", sched["입주예정"] ? sched["입주예정"].slice(0,4)+"."+sched["입주예정"].slice(4) : ""],
+  ].filter(d => d[1]);
+  // 단지 표: 값이 있는 열만
+  const dj = (n.단지 || []).map(d => ({...d, 보증금: won(d.임대보증금), 월임대료: won(d.월임대료), 계약금: won(d.계약금), 중도금: won(d.중도금), 잔금: won(d.잔금), 공급호수: d.공급호수 ? d.공급호수+"호" : ""}));
+  const djCols = ["단지명","주소","주택유형","공급호수","보증금","월임대료","계약금","중도금","잔금","난방"].filter(c => dj.some(d => d[c]));
+  const ht = n.주택형 || [];
+  const htCols = ht.length ? Object.keys(ht.reduce((a,r)=>Object.assign(a,r),{})).filter(c => ht.some(r => r[c] && r[c] !== "공고문 참조" || c.match(/주택형|면적|세대/))) : [];
+  const links = [
+    n.공고원문URL && `<a class="btn primary" href="${esc(n.공고원문URL)}" target="_blank" rel="noopener">공고문 원문 보기</a>`,
+    n.청약홈URL && `<a class="btn ${n.공고원문URL?"":"primary"}" href="${esc(n.청약홈URL)}" target="_blank" rel="noopener">청약홈에서 보기</a>`,
+    n.마이홈URL && `<a class="btn" href="${esc(n.마이홈URL)}" target="_blank" rel="noopener">마이홈에서 보기</a>`,
+  ].filter(Boolean).join("");
+  const dd = dday(n);
+  $("#detailView").innerHTML = `
+    <button class="back" id="back">← 목록으로</button>
+    <div class="card">
+      <div class="chips">${pill(n.접수상태)}${dd?`<span class="chip">${esc(dd)}</span>`:""}<span class="chip">${esc(n.구분)} · ${esc(typeOf(n))}</span>${n.공고상태?`<span class="chip">${esc(n.공고상태)}</span>`:""}</div>
+      <h2>${esc(n.공고명)}</h2>
+      <dl class="kv">
+        <dt>지역</dt><dd>${esc(region(n) || "-")}</dd>
+        <dt>공급기관</dt><dd>${esc(n.공급기관 || "-")}${n.시공사?` · 시공 ${esc(n.시공사)}`:""}</dd>
+        ${n.총공급호수?`<dt>공급</dt><dd>${Number(n.총공급호수).toLocaleString()}호</dd>`:""}
+        ${n.문의?`<dt>문의</dt><dd>${esc(n.문의)}</dd>`:""}
+      </dl>
+      <div class="links">${links || '<span class="note">공고 링크가 제공되지 않았습니다.</span>'}</div>
+    </div>
+    ${dates.length?`<div class="card"><h3>일정</h3><div class="dates">${dates.map(d=>`<div class="date${d[2]?" key":""}"><span>${esc(d[0])}</span><b>${esc(d[1].replaceAll("-","."))}</b></div>`).join("")}</div></div>`:""}
+    ${djCols.length && dj.some(d=>d.단지명||d.주소)?`<div class="card"><h3>공급 단지 ${dj.length>1?`(${dj.length}곳)`:""}</h3>${table(dj, djCols, null, 10)}</div>`:""}
+    ${htCols.length?`<div class="card"><h3>주택형별 공급 정보</h3>${table(ht, htCols, null, 15)}</div>`:""}
+    <div class="card"><p class="note">소득·자산 기준, 신청 자격, 제출 서류 같은 세부 조건은 공고문 원문에 있습니다. 일정은 정정공고로 바뀔 수 있으니 신청 전에 원문을 확인하세요.</p></div>`;
+  $("#back").onclick = () => { history.length > 1 ? history.back() : (location.hash = ""); };
+}
+
+function route(){
+  const k = location.hash.slice(1), n = byKey[k];
+  $("#listView").hidden = !!n; $("#detailView").hidden = !n;
+  if (n){ renderDetail(n); document.title = n.공고명 + " · 공공주택 모집공고"; window.scrollTo(0,0); }
+  else { document.title = "공공주택 모집공고"; }
+}
+
+// init
+$("#updated").textContent = `${DATA.updated} 기준`;
+const c = counts();
+$("#summary").innerHTML = `<div class="stat"><b>${c.open}</b><span>접수중</span></div><div class="stat"><b>${c.soon}</b><span>접수예정</span></div><div class="stat"><b>${c.today}</b><span>오늘 마감</span></div>`;
+const live = items.filter(n => n.접수상태 !== "접수마감");
+const SIDO_ORDER = ["서울특별시","경기도","인천광역시","부산광역시","대구광역시","광주광역시","대전광역시","울산광역시","세종특별자치시","강원특별자치도","충청북도","충청남도","전북특별자치도","전라남도","전남광주통합특별시","경상북도","경상남도","제주특별자치도","전국","여러 지역"];
+const sidos = [...new Set(items.map(n => n.시도).filter(Boolean))].sort((a,b) => (SIDO_ORDER.indexOf(a)+99*(SIDO_ORDER.indexOf(a)<0)) - (SIDO_ORDER.indexOf(b)+99*(SIDO_ORDER.indexOf(b)<0)));
+fillSelect($("#sido"), "전체 지역", sidos);
+const tc = {}; items.forEach(n => tc[typeOf(n)] = (tc[typeOf(n)]||0) + 1);
+fillSelect($("#type"), "전체 유형", Object.keys(tc).sort((a,b) => tc[b]-tc[a]));
+$("#q").oninput = e => { state.q = e.target.value; renderList(); };
+$("#sido").onchange = e => { state.sido = e.target.value; renderList(); };
+$("#type").onchange = e => { state.type = e.target.value; renderList(); };
+$("#sort").onchange = e => { state.sort = e.target.value; renderList(); };
+$("#kind").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.v !== undefined){ state.kind = b.dataset.v; $("#kind").querySelectorAll("[data-v]").forEach(x => x.setAttribute("aria-pressed", x === b)); }
+  else { const s = b.dataset.s; state.st.has(s) ? state.st.delete(s) : state.st.add(s); if (!state.st.size) state.st.add(s); b.setAttribute("aria-pressed", state.st.has(s)); }
+  renderList();
+};
+$("#home").onclick = e => { e.preventDefault(); location.hash = ""; };
+window.addEventListener("hashchange", route);
+renderList(); route();
+</script>
+</body>
+</html>

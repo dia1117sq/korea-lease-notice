@@ -1,0 +1,6 @@
+.env
+__pycache__/
+data/*.csv
+data/.old
+data/.merged_prev.json
+site/

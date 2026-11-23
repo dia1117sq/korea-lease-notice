@@ -1,0 +1,68 @@
+# 매일 07:43(KST) 공고 수집 → 통합 → 사이트 생성 → GitHub Pages 배포
+name: daily-update
+
+on:
+  schedule:
+    - cron: "43 22 * * *"   # UTC 22:43 = KST 07:43
+  workflow_dispatch:         # Actions 탭에서 수동 실행 가능
+  push:
+    branches: [main]
+    paths: ["*.py", "site_template.html", ".github/workflows/daily.yml"]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    env:
+      DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+      TZ: Asia/Seoul
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 한 출처가 실패해도 나머지는 계속 (이전 데이터로 사이트 생성)
+      - name: 마이홈 수집
+        run: python collect_myhome.py
+        continue-on-error: true
+      - name: LH 공고 수집
+        run: python collect_lh.py
+        continue-on-error: true
+      - name: LH 공급정보
+        run: python enrich_lh_supply.py 300
+        continue-on-error: true
+      - name: 청약홈 수집
+        run: python collect_applyhome.py
+        continue-on-error: true
+      - name: 통합 및 사이트 생성
+        run: |
+          python merge.py
+          python build_site.py
+
+      - name: 데이터 저장 (다음 실행의 신규 공고 비교 기준)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/*.json
+          git commit -m "data: $(date +'%Y-%m-%d %H:%M') 수집" || echo "변경 없음"
+          git push
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4
