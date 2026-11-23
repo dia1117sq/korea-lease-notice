@@ -24,11 +24,14 @@ FONT_DIRS = ["/usr/share/fonts/opentype/noto", "/usr/share/fonts/noto-cjk", "/Sy
 def font(weight, size):
     names = {"black": "NotoSansCJK-Black.ttc", "bold": "NotoSansCJK-Bold.ttc",
              "medium": "NotoSansCJK-Medium.ttc", "regular": "NotoSansCJK-Regular.ttc"}
-    for d in FONT_DIRS:
-        p = os.path.join(d, names[weight])
-        if os.path.exists(p):
-            return ImageFont.truetype(p, size, index=1)   # index 1 = KR
-    raise SystemExit("한글 글꼴(Noto Sans CJK)을 찾을 수 없습니다")
+    fallback = {"black": ["black", "bold"], "bold": ["bold", "black"],
+                "medium": ["medium", "regular", "bold"], "regular": ["regular", "medium", "bold"]}[weight]
+    for w in fallback:                               # 없는 굵기는 가까운 굵기로 대신
+        for d in FONT_DIRS:
+            p = os.path.join(d, names[w])
+            if os.path.exists(p):
+                return ImageFont.truetype(p, size, index=1)   # index 1 = KR
+    raise SystemExit("한글 글꼴(Noto Sans CJK)을 찾을 수 없습니다: sudo apt-get install fonts-noto-cjk fonts-noto-cjk-extra")
 
 
 SHORT = {"서울특별시": "서울", "부산광역시": "부산", "대구광역시": "대구", "인천광역시": "인천", "광주광역시": "광주",
