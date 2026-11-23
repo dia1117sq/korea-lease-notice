@@ -32,7 +32,9 @@ def call(method, url, data=None):
         with urllib.request.urlopen(req, timeout=60) as r:
             return json.load(r)
     except urllib.error.HTTPError as e:
-        raise SystemExit(f"Instagram API 오류 {e.code}: {e.read().decode(errors='replace')[:500]}")
+        msg = f"Instagram API 오류 {e.code}: {e.read().decode(errors='replace')[:500]}"
+        print("::error::" + msg.replace("\n", " "))
+        raise SystemExit(msg)
 
 
 def log(*a):
@@ -118,6 +120,7 @@ def main():
     if DRY:
         for url, cap, at in jobs:
             log(f"[미리보기] {at} 게시 예정: {url}\n" + open(cap, encoding="utf-8").read()[:200])
+        print(f"::notice::시험 실행: 게시하지 않음 (영상 {len(jobs)}편 준비 완료)")
         return
     refresh_token()
     ready = []
@@ -131,6 +134,7 @@ def main():
         wait_until(at)
         r = call("POST", f"{API}/{USER}/media_publish", {"creation_id": cid})
         log(f"게시 완료 ({at}): 미디어 ID {r.get('id')}")
+        print(f"::notice::인스타그램 게시 완료 ({at}) — 미디어 ID {r.get('id')}")
 
 
 if __name__ == "__main__":
