@@ -331,7 +331,7 @@ async function showVisits(){
   if (!GC) return;
   const base = `https://${GC}.goatcounter.com/counter/TOTAL.json`;
   const mon = DATA.today.slice(0, 8) + "01";
-  const get = q => fetch(base + q).then(r => r.ok ? r.json() : null).then(j => j ? String(j.count).trim() : "0").catch(() => null);
+  const get = q => fetch(base + q).then(r => r.ok ? r.json() : null).then(j => j ? String(j.count_unique ?? j.count).trim() : "0").catch(() => null);
   const [d, m, t] = await Promise.all([get(`?start=${DATA.today}`), get(`?start=${mon}`), get("")]);
   if (t === null) return;
   const el = $("#visits");
