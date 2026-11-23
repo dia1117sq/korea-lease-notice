@@ -34,8 +34,8 @@ jobs:
       DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
       TZ: Asia/Seoul
       SITE_URL: https://dia1117sq.github.io/korea-lease-notice
-      # 예약 실행이거나, 수동 실행에서 '게시'를 체크했을 때만 실제 게시
-      DRY_RUN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.post)) && '0' || '1' }}
+      # 예약 실행, 수동 실행에서 '게시' 체크, 또는 커밋 메시지에 [post-now]가 있을 때만 실제 게시
+      DRY_RUN: ${{ (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.post) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[post-now]'))) && '0' || '1' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
