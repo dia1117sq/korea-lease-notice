@@ -14,10 +14,13 @@ import json, os, sys, time, urllib.parse, urllib.request, urllib.error
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
-API = "https://graph.instagram.com/" + os.environ.get("IG_API_VERSION", "v25.0")
-USER = os.environ.get("IG_USER_ID", "")
-TOKEN = os.environ.get("IG_ACCESS_TOKEN", "")
+USER = os.environ.get("IG_USER_ID", "").strip()
+TOKEN = os.environ.get("IG_ACCESS_TOKEN", "").strip()
 DRY = os.environ.get("DRY_RUN") == "1"
+VER = os.environ.get("IG_API_VERSION", "v25.0")
+# 토큰 종류에 따라 주소가 다름: Instagram 로그인 토큰(IG...) → graph.instagram.com, Facebook/시스템 사용자 토큰(EAA...) → graph.facebook.com
+HOST = "graph.facebook.com" if TOKEN.startswith("EAA") else "graph.instagram.com"
+API = f"https://{HOST}/{VER}"
 
 
 def call(method, url, data=None):
@@ -45,7 +48,24 @@ def check_url(url):
         raise SystemExit(f"영상 주소의 형식이 mp4가 아닙니다: {ct}")
 
 
+def check():
+    """게시하지 않고 토큰·계정·게시 한도만 확인 (결과는 GitHub 실행 화면의 알림으로 표시)"""
+    if not USER or not TOKEN:
+        print("::error::IG_USER_ID 또는 IG_ACCESS_TOKEN Secret이 비어 있습니다"); sys.exit(1)
+    kind = "Facebook(통합 로그인) 토큰" if HOST == "graph.facebook.com" else "Instagram 로그인 토큰"
+    try:
+        me = call("GET", f"{API}/{USER}", {"fields": "username,name"})
+        lim = call("GET", f"{API}/{USER}/content_publishing_limit", {"fields": "quota_usage,config"})
+    except SystemExit as e:
+        print(f"::error::토큰 확인 실패 ({kind}, {HOST}): {e}"); sys.exit(1)
+    d = (lim.get("data") or [{}])[0]
+    total = (d.get("config") or {}).get("quota_total", "?")
+    print(f"::notice::토큰 확인 성공 — 계정 @{me.get('username')} / {kind} / 24시간 게시 한도 {d.get('quota_usage', 0)}/{total}")
+
+
 def refresh_token():
+    if HOST != "graph.instagram.com":
+        return   # 시스템 사용자·Facebook 장기 토큰은 이 방식으로 연장하지 않음
     """장기 토큰(60일) 만료일을 늘림. 토큰 문자열이 바뀌면 GitHub Secret 갱신이 필요하다고 알림."""
     try:
         r = call("GET", "https://graph.instagram.com/refresh_access_token", {"grant_type": "ig_refresh_token"})
@@ -86,6 +106,8 @@ def wait_until(hhmm):
 
 
 def main():
+    if sys.argv[1:2] == ["check"]:
+        return check()
     jobs = [a.split("|") for a in sys.argv[1:]]
     if not jobs:
         raise SystemExit(__doc__)
