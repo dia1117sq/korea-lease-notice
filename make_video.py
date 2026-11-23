@@ -147,16 +147,63 @@ def ease(x):
     x = max(0.0, min(1.0, x)); return 1 - (1 - x) ** 3
 
 
+BG_DIR = os.path.join(HERE, "assets", "bg")
+
+
+def load_backgrounds():
+    if not os.path.isdir(BG_DIR):
+        return []
+    fs = sorted(f for f in os.listdir(BG_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png")))
+    out = []
+    for f in fs:
+        im = Image.open(os.path.join(BG_DIR, f)).convert("RGB")
+        r = max(W / im.width, H / im.height)            # 화면을 꽉 채우도록 자르기
+        im = im.resize((round(im.width * r), round(im.height * r)), Image.LANCZOS)
+        x, y = (im.width - W) // 2, (im.height - H) // 2
+        out.append(im.crop((x, y, x + W, y + H)))
+    return out
+
+
+def tint_layer(kind):
+    """사진 위 덧씌우기. 'dark' = 위아래 어두운 그라데이션(공고 카드), 'brand' = 반투명 초록."""
+    im = Image.new("RGBA", (W, H))
+    px = ImageDraw.Draw(im)
+    for y in range(0, H, 4):
+        t = y / H
+        if kind == "dark":
+            a = 0.62 - 0.22 * min(1, t / 0.45) + (0.3 * max(0, (t - 0.55) / 0.45))
+            px.rectangle([0, y, W, y + 4], fill=(12, 20, 18, int(255 * a)))
+        else:
+            a = 0.70 + 0.12 * t
+            px.rectangle([0, y, W, y + 4], fill=ACCENT + (int(255 * a),))
+    return im
+
+
 class Scene:
     """배경 + (레이어, x, y, 등장시각) 목록. 레이어는 0.45초 동안 아래에서 떠오르며 나타남."""
-    def __init__(self, dur, bg):
+    def __init__(self, dur, bg, photo=None, tint=None):
         self.dur, self.bg, self.items, self.dynamic = dur, Image.new("RGBA", (W, H), bg + (255,)), [], []
+        self.photo, self.tint = photo, (tint_layer(tint) if photo is not None and tint else None)
+        if photo is not None:
+            self.dynamic.append(lambda f, t: None)   # 매 프레임 다시 그림(배경이 움직이므로)
+        self.label = None
+
+    def base(self, t):
+        if self.photo is None:
+            return self.bg.copy()
+        z = 1.0 + 0.07 * (t / self.dur)                  # 천천히 확대 (켄 번스)
+        cw, ch = W / z, H / z
+        x0, y0 = (W - cw) / 2, (H - ch) * 0.4
+        f = self.photo.resize((W, H), Image.BILINEAR, box=(x0, y0, x0 + cw, y0 + ch)).convert("RGBA")
+        if self.tint is not None:
+            f.alpha_composite(self.tint)
+        return f
 
     def add(self, im, x, y, at=0.0, rise=36):
         self.items.append((im, x, y, at, rise)); return im
 
     def frame(self, t):
-        f = self.bg.copy()
+        f = self.base(t)
         for im, x, y, at, rise in self.items:
             p = ease((t - at) / 0.45)
             if p <= 0: continue
@@ -167,6 +214,8 @@ class Scene:
                 f.alpha_composite(im, (int(x), int(y)))
         for fn in self.dynamic:
             fn(f, t)
+        if self.photo is not None:
+            f.alpha_composite(EXAMPLE_LABEL, (W - M - EXAMPLE_LABEL.width, 196))
         return f.convert("RGB")
 
     def settled(self):
@@ -193,11 +242,18 @@ class Scene:
 
 
 # ---------- 장면 ----------
+EXAMPLE_LABEL = None
+
+
+def make_label():
+    global EXAMPLE_LABEL
+    EXAMPLE_LABEL = pill_layer("이미지는 예시입니다", font("medium", 28), (255, 255, 255, 230), (0, 0, 0, 110), padx=16, pady=8, r=10)
+
 M = 90   # 좌우 여백 (인스타그램 UI를 피해 위 240px, 아래 380px 안쪽에 내용 배치)
 
 
-def scene_hook(start, end, total, picks):
-    s = Scene(3.5, ACCENT)
+def scene_hook(start, end, total, picks, photo=None):
+    s = Scene(3.5, ACCENT, photo, "brand")
     y = 340
     pl = s.add(pill_layer(f"{md(start)} ~ {md(end)}", font("bold", 42), ACCENT, (255, 255, 255, 235)), M, y, 0.0)
     y += pl.height + 50
@@ -219,17 +275,22 @@ def scene_hook(start, end, total, picks):
     return s
 
 
-def scene_card(i, n, today):
-    s = Scene(4.5, BG)
+def scene_card(i, n, today, photo=None):
+    s = Scene(4.5, BG, photo, "dark")
+    on_photo = photo is not None
+    title_col = (255, 255, 255) if on_photo else INK
+    sub_col = (215, 225, 221) if on_photo else MUTED
+    track = (255, 255, 255, 90) if on_photo else LINE
     is_rent = n["구분"] == "임대"
     col, soft = (ACCENT, ACCENT_SOFT) if is_rent else (BLUE, BLUE_SOFT)
     # 진행 표시
     prog, d = layer(W - 2 * M, 60)
-    d.text((0, 0), f"{i:02d}", font=font("black", 44), fill=col)
-    d.text((62, 6), "/ 05", font=font("medium", 36), fill=MUTED)
+    d.text((0, 0), f"{i:02d}", font=font("black", 44), fill=(255, 255, 255) if on_photo else col)
+    d.text((62, 6), "/ 05", font=font("medium", 36), fill=sub_col)
+    bar = (255, 255, 255) if on_photo else col
     for k in range(5):
         x0 = 220 + k * 120
-        d.rounded_rectangle([x0, 24, x0 + 104, 32], 4, fill=col if k < i else LINE)
+        d.rounded_rectangle([x0, 24, x0 + 104, 32], 4, fill=bar if k < i else track)
     s.add(prog, M, 280, 0.0, rise=0)
     # 구분 칩 + D-day
     typ = (n.get("유형") or "").replace("APT 국민", "공공분양(국민주택)").replace("APT", "아파트").strip()
@@ -241,11 +302,11 @@ def scene_card(i, n, today):
     # 지역 + 공고명
     region = SHORT.get(n["시도"], n["시도"])
     if n.get("시군구") and len(n.get("단지", [])) <= 1: region += " " + n["시군구"]
-    s.add(text_layer([region], font("bold", 54), MUTED), M, 535, 0.12)
+    s.add(text_layer([region], font("bold", 54), sub_col), M, 535, 0.12)
     tmpd = ImageDraw.Draw(Image.new("RGBA", (1, 1)))
     tf = font("black", 84)
     lines = wrap(tmpd, clean_title(n["공고명"]), tf, W - 2 * M, 3)
-    title = s.add(text_layer(lines, tf, INK, 1.22), M, 620, 0.18)
+    title = s.add(text_layer(lines, tf, title_col, 1.22), M, 620, 0.18)
     # 정보 카드
     rows = []
     if n.get("총공급호수"): rows.append(("공급", f"{int(n['총공급호수']):,}호"))
@@ -274,12 +335,12 @@ def scene_card(i, n, today):
         d.text((250, y + 28), vv, font=val, fill=INK)
     top = 620 + title.height + 50
     s.add(card, M, top, 0.3)
-    s.add(text_layer(["자격·조건은 사이트에서 확인하세요"], font("medium", 40), MUTED), M, top + card.height + 44, 0.5)
+    s.add(text_layer(["자격·조건은 사이트에서 확인하세요"], font("medium", 40), sub_col), M, top + card.height + 44, 0.5)
     return s
 
 
-def scene_cta(more):
-    s = Scene(4.0, ACCENT)
+def scene_cta(more, photo=None):
+    s = Scene(4.0, ACCENT, photo, "brand")
     y = 360
     if more > 0:
         a = s.add(text_layer([f"이번 주 공고 {more}건 더 있어요"], font("bold", 56), (210, 232, 225)), M, y, 0.0)
@@ -323,8 +384,12 @@ def main():
     if len(picks) < 3:
         raise SystemExit(f"소개할 공고가 부족합니다 ({len(picks)}건)")
     os.makedirs(TMP, exist_ok=True)
-    scenes = [scene_hook(start, end, len(week), picks)] + \
-             [scene_card(i, n, today) for i, n in enumerate(picks, 1)] + [scene_cta(max(0, len(week) - len(picks)))]
+    make_label()
+    bgs = load_backgrounds()
+    bg = (lambda k: bgs[k % len(bgs)]) if bgs else (lambda k: None)
+    scenes = [scene_hook(start, end, len(week), picks, bg(0))] + \
+             [scene_card(i, n, today, bg(i)) for i, n in enumerate(picks, 1)] + \
+             [scene_cta(max(0, len(week) - len(picks)), bg(len(picks) + 1))]
     files = []
     for k, sc in enumerate(scenes):
         p = os.path.join(TMP, f"s{k:02d}.mp4"); sc.render(p); files.append(p)
