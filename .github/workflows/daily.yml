@@ -47,6 +47,9 @@ jobs:
       - name: 청약홈 수집
         run: python collect_applyhome.py
         continue-on-error: true
+      - name: SH(서울주거포털) 수집
+        run: python collect_sh.py
+        continue-on-error: true
       - name: 통합 및 사이트 생성
         run: |
           python merge.py

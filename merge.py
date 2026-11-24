@@ -134,6 +134,19 @@ def main():
             "시공사": r["시공사"], "청약일정": sched,
         }
 
+    # 3-2) SH(서울주택도시개발공사): 서울주거포털에서 수집한 공고
+    sh_path = os.path.join(DATA, "sh_notices.json")
+    if os.path.exists(sh_path):
+        for r in json.load(open(sh_path, encoding="utf-8"))["items"]:
+            out[r["id"]] = {
+                "id": r["id"], "출처": ["SH"], "구분": r["구분"], "유형": r["유형"], "공급기관": "SH",
+                "공고명": r["공고명"], "공고상태": "정정공고" if "정정" in r["공고명"] else "",
+                "시도": "서울특별시", "시군구": "", "모집공고일": r["모집공고일"],
+                "접수시작": r["접수시작"], "접수마감": r["접수마감"], "당첨발표": r["당첨발표"],
+                "총공급호수": r["총공급호수"], "단지": [], "공고원문URL": r["공고원문URL"],
+                "마이홈URL": "", "청약홈URL": "", "문의": r["문의"], "SH상태": r["SH상태"],
+            }
+
     # 4) 정정공고가 나오면 이전 공고는 숨김
     #   a) 마이홈의 정정 전 공고ID 사슬
     replaced = {}
@@ -161,6 +174,8 @@ def main():
         st = status(n["접수시작"], n["접수마감"], today)
         if n["출처"] == ["LH"]:   # LH 단독 공고는 접수시작일이 없어 LH 상태를 따름
             st = {"접수마감": "접수마감", "접수중": "접수중"}.get(n.get("LH상태"), "접수예정" if st != "접수마감" else st)
+        if st == "확인필요" and n.get("SH상태") == "모집중":   # SH 본문에 날짜가 없으면 목록의 '모집중'을 따름
+            st = "접수중"
         n["접수상태"] = st
         n["D-day"] = (datetime.strptime(n["접수마감"], "%Y-%m-%d").date() - now.date()).days if n["접수마감"] else None
     rows.sort(key=lambda n: (n["접수상태"] == "접수마감", n["접수마감"] or "9999"))

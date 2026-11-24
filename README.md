@@ -6,6 +6,7 @@
 | collect_lh.py | LH 분양임대공고문 (`lhLeaseNoticeInfo1`) | LH 공고 목록·상태 (기본: 주택만, `--all`이면 상가·토지 포함) |
 | enrich_lh_supply.py | LH 공고별 공급정보 (`getLeaseNoticeSplInfo1`) | 주택형·면적·세대수·보증금·임대료 |
 | collect_applyhome.py | 청약홈 분양정보 (api.odcloud.kr) | APT·잔여세대·오피스텔·공공지원민간임대·임의공급, 특공/1·2순위/당첨/계약 일정 |
+| collect_sh.py | 서울주거포털 SH 공고 목록·상세 (공식 API 없음) | SH 모집중 공고, 본문에서 신청기간·공급호수·발표일 추출 |
 | merge.py | — | 세 출처 통합·중복 제거 (LH 공고번호, 공고일±3일+지역+단지명), 접수상태·D-day 계산 |
 
 실행: `./run_all.sh` → 결과는 `data/` (json + 엑셀용 csv).
@@ -19,8 +20,9 @@
 - Settings → Pages → Source: **GitHub Actions**
 - Actions 탭의 daily-update → Run workflow 로 즉시 실행 가능
 
-## 인스타그램 자동 게시 (매주 월요일)
-`.github/workflows/weekly-reels.yml` — 월 06:20 시작 → 최신 공고 수집 → `make_video.py` 로 릴스 2편(공급 규모 1~5위 / 6~10위) →
+## 인스타그램 자동 게시 (매주 월·수·목·금)
+`.github/workflows/weekly-reels.yml` — 06:20 시작 → 최신 공고 수집 → `make_video.py` 로 릴스 2편(공급 규모 1~5위 / 6~10위) →
+월 = 전국 '이번 주 접수 시작', 수 = 서울, 목 = 경기, 금 = 경상권(경북·경남·부산·대구·울산) (`--region 서울|경기|경상`) →
 사이트 `reels/` 에 영상 공개 → `post_reels.py` 가 **07:00 PART 1, 07:10 PART 2** 게시.
 - 필요한 Secret: `IG_USER_ID`, `IG_ACCESS_TOKEN` (Instagram API with Instagram Login, 권한 `instagram_business_basic`, `instagram_business_content_publish`)
 - 시험: Actions → weekly-reels → Run workflow (게시 체크 해제 = 영상만 생성)

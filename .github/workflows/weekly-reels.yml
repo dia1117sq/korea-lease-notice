@@ -1,18 +1,24 @@
-# 매주 월요일: 최신 공고 수집 → 릴스 2편 생성 → 사이트에 영상 공개 → 07:00 PART 1, 07:10 PART 2 인스타그램 게시
+# 매주 월·수·목·금: 최신 공고 수집 → 릴스 2편 생성 → 사이트에 영상 공개 → 07:00 PART 1, 07:10 PART 2 인스타그램 게시
+#   월: 전국 '이번 주 접수 시작' TOP 10 / 수: 서울 TOP 10 / 목: 경기 TOP 10 / 금: 경상권(경북·경남·부산·대구·울산) TOP 10
 name: weekly-reels
 
 on:
   schedule:
-    - cron: "20 21 * * 0"    # UTC 일 21:20 = KST 월 06:20 (GitHub 예약은 몇 분~수십 분 늦을 수 있어 미리 시작)
+    - cron: "20 21 * * 0,2,3,4"   # UTC 일·화·수·목 21:20 = KST 월·수·목·금 06:20 (GitHub 예약은 늦을 수 있어 미리 시작)
   workflow_dispatch:
     inputs:
       post:
         description: "인스타그램에 실제로 게시 (false면 영상만 만들고 미리보기)"
         type: boolean
         default: false
+      region:
+        description: "영상 종류 (auto = 요일에 맞춰 자동)"
+        type: choice
+        options: [auto, 전국, 서울, 경기, 경상]
+        default: auto
   push:
     branches: [main]
-    paths: [".github/workflows/weekly-reels.yml", "post_reels.py"]   # 설정을 바꾸면 게시 없이 시험 실행
+    paths: [".github/workflows/weekly-reels.yml", "post_reels.py", "make_video.py"]   # 설정을 바꾸면 게시 없이 시험 실행 (커밋 메시지 [region:서울] 등으로 지역 지정)
 
 permissions:
   contents: read
@@ -55,11 +61,24 @@ jobs:
           python collect_lh.py
           python enrich_lh_supply.py 300
           python collect_applyhome.py
+          python collect_sh.py
       - name: 통합·사이트·영상 생성
+        env:
+          REGION_INPUT: ${{ inputs.region || 'auto' }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           python merge.py
           python build_site.py
-          python make_video.py "$(date +%F)"
+          # 요일(KST)에 맞춰 영상 종류 선택: 월=전국, 수=서울, 목=경기, 금=경상권
+          R="$REGION_INPUT"
+          if [ "$R" = "auto" ]; then
+            case "$COMMIT_MSG" in *"[region:서울]"*) R=서울;; *"[region:경기]"*) R=경기;; *"[region:경상]"*) R=경상;; esac
+          fi
+          if [ "$R" = "auto" ]; then
+            case "$(date +%u)" in 3) R=서울;; 4) R=경기;; 5) R=경상;; *) R=전국;; esac
+          fi
+          echo "::notice::영상 종류: $R"
+          if [ "$R" = "전국" ]; then python make_video.py "$(date +%F)"; else python make_video.py "$(date +%F)" --region "$R"; fi
           mkdir -p site/reels
           cp video/*.mp4 site/reels/
           ls -la site/reels
@@ -85,11 +104,15 @@ jobs:
           T=$(date +%Y%m%d)
           sleep 30   # 사이트 반영 대기
           ARGS=()
-          if [ -f "video/reel_${T}_1.mp4" ]; then
-            ARGS+=("$SITE_URL/reels/reel_${T}_1.mp4|video/caption_${T}_1.txt|07:00")
-            [ -f "video/reel_${T}_2.mp4" ] && ARGS+=("$SITE_URL/reels/reel_${T}_2.mp4|video/caption_${T}_2.txt|07:10")
+          P1=$(ls video/reel_${T}*_1.mp4 2>/dev/null | head -1)
+          if [ -n "$P1" ]; then
+            B=$(basename "$P1" _1.mp4)                       # 예: reel_20261125_seoul
+            C=${B/reel_/caption_}
+            ARGS+=("$SITE_URL/reels/${B}_1.mp4|video/${C}_1.txt|07:00")
+            [ -f "video/${B}_2.mp4" ] && ARGS+=("$SITE_URL/reels/${B}_2.mp4|video/${C}_2.txt|07:10")
           else
-            ARGS+=("$SITE_URL/reels/reel_${T}.mp4|video/caption_${T}.txt|07:00")
+            F=$(ls video/reel_${T}*.mp4 | head -1); B=$(basename "$F" .mp4); C=${B/reel_/caption_}
+            ARGS+=("$SITE_URL/reels/${B}.mp4|video/${C}.txt|07:00")
           fi
           python post_reels.py "${ARGS[@]}"
 

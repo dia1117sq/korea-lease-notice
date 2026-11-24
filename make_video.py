@@ -1,6 +1,6 @@
 """인스타그램 릴스용 '이번 주 접수 시작' 영상 생성 (1080x1920, 30fps, 약 30초)
 
-사용법:  python3 make_video.py [기준일 YYYY-MM-DD]   (기본: 오늘, KST)
+사용법:  python3 make_video.py [기준일 YYYY-MM-DD] [--region 서울|경기|경상]   (기본: 오늘, KST / 지역 없으면 전국 '이번 주 접수 시작')
 결과:    video/reel_YYYYMMDD.mp4, video/caption_YYYYMMDD.txt
 필요:    ffmpeg, Pillow, 한글 글꼴(Noto Sans CJK KR)
 """
@@ -69,7 +69,7 @@ def is_public(n):
     if "민영" in t or "임의공급" in t or "잔여세대" in t or "오피스텔" in t:
         return False
     org = n.get("공급기관") or ""
-    return org == "LH" or "공사" in org or any(k in t for k in ("국민", "공공", "임대", "행복", "영구"))
+    return org in ("LH", "SH") or "공사" in org or any(k in t for k in ("국민", "공공", "임대", "행복", "영구", "수요자맞춤", "희망하우징"))
 
 
 def pick(items, start, end, k=10):
@@ -86,6 +86,27 @@ def pick(items, start, end, k=10):
         if n not in out: out.append(n)
     out.sort(key=lambda n: -(n["총공급호수"] or 0))   # 순위 = 공급 규모
     return out
+
+
+REGIONS = {   # 요일별 지역 영상: 키 → (시·도 목록, 화면 표시 이름, 파일 이름용)
+    "서울": (["서울특별시"], "서울", "seoul"),
+    "경기": (["경기도"], "경기", "gyeonggi"),
+    "경상": (["경상북도", "경상남도", "부산광역시", "대구광역시", "울산광역시"], "경상권", "gyeongsang"),
+}
+
+
+def region_live(items, sidos, today):
+    """지역의 지금 신청 가능한(접수중·접수예정, 마감 전) 공고"""
+    t = today.isoformat()
+    return [n for n in items if n["시도"] in sidos and n["접수상태"] in ("접수중", "접수예정")
+            and (not n["접수마감"] or n["접수마감"] >= t)]
+
+
+def pick_region(live, k=10):
+    """공공주택을 공급 규모순으로 먼저, 모자라면 민간 분양 등으로 채움"""
+    pub = sorted([n for n in live if is_public(n)], key=lambda n: -(n["총공급호수"] or 0))
+    etc = sorted([n for n in live if not is_public(n)], key=lambda n: -(n["총공급호수"] or 0))
+    return (pub + etc)[:k]
 
 
 def rent_text(n):
@@ -253,16 +274,16 @@ def make_label():
 M = 90   # 좌우 여백 (인스타그램 UI를 피해 위 240px, 아래 380px 안쪽에 내용 배치)
 
 
-def scene_hook(start, end, total, picks, photo=None, part=1, parts=2, lo=1, hi=5):
+def scene_hook(start, end, total, picks, photo=None, part=1, parts=2, lo=1, hi=5, lines=None, date_text=None):
     s = Scene(3.5, ACCENT, photo, "brand")
     y = 300
     row, d = layer(W - 2 * M, 80)
     p1 = pill_layer(f"PART {part}/{parts} · {lo}~{hi}위", font("black", 42), (255, 255, 255), (12, 20, 18, 150))
-    p2 = pill_layer(f"{md(start)} ~ {md(end)}", font("bold", 42), ACCENT, (255, 255, 255, 235))
+    p2 = pill_layer(date_text or f"{md(start)} ~ {md(end)}", font("bold", 42), ACCENT, (255, 255, 255, 235))
     row.alpha_composite(p1, (0, 0)); row.alpha_composite(p2, (p1.width + 16, 0))
     s.add(row, M, y, 0.0)
     y += p1.height + 50
-    tl = s.add(text_layer(["이번 주", "접수 시작하는", "공공주택"], font("black", 120), (255, 255, 255), 1.18), M, y, 0.15)
+    tl = s.add(text_layer(lines or ["이번 주", "접수 시작하는", "공공주택"], font("black", 120), (255, 255, 255), 1.18), M, y, 0.15)
     y += tl.height + 10
     num_f, unit_f = font("black", 240), font("black", 100)
     ny = y
@@ -305,9 +326,14 @@ def scene_card(i, n, today, photo=None, total=5):
     typ = (n.get("유형") or "").replace("APT 국민", "공공분양(국민주택)").replace("APT", "아파트").strip()
     chip = pill_layer(f"{n['구분']} · {typ}", font("bold", 42), col, soft)
     s.add(chip, M, 400, 0.05)
-    dd = (date.fromisoformat(n["접수시작"]) - today).days
-    s.add(pill_layer("내일 접수 시작" if dd == 1 else f"접수 D-{dd}" if dd > 0 else "오늘 접수 시작",
-                     font("bold", 42), (255, 255, 255), URGENT), M + chip.width + 18, 400, 0.05)
+    dd = (date.fromisoformat(n["접수시작"]) - today).days if n.get("접수시작") else -1
+    if dd > 1: badge = f"접수 D-{dd}"
+    elif dd == 1: badge = "내일 접수 시작"
+    elif dd == 0: badge = "오늘 접수 시작"
+    else:   # 이미 접수 중: 마감까지 남은 날
+        left = (date.fromisoformat(n["접수마감"]) - today).days if n.get("접수마감") else None
+        badge = "접수중" if left is None or left > 60 else ("오늘 마감" if left == 0 else f"마감 D-{left}")
+    s.add(pill_layer(badge, font("bold", 42), (255, 255, 255), URGENT), M + chip.width + 18, 400, 0.05)
     # 지역 + 공고명
     region = SHORT.get(n["시도"], n["시도"])
     if n.get("시군구") and len(n.get("단지", [])) <= 1: region += " " + n["시군구"]
@@ -320,14 +346,17 @@ def scene_card(i, n, today, photo=None, total=5):
     rows = []
     if n.get("총공급호수"): rows.append(("공급", f"{int(n['총공급호수']):,}호"))
     far = n["접수마감"] and n["접수마감"] > (today + timedelta(days=60)).isoformat()
-    rows.append(("접수", md(n["접수시작"]) + ("부터" if far else f" ~ {md(n['접수마감'])}" if n["접수마감"] and n["접수마감"] != n["접수시작"] else "")))
+    if n.get("접수시작"):
+        rows.append(("접수", md(n["접수시작"]) + ("부터" if far else f" ~ {md(n['접수마감'])}" if n["접수마감"] and n["접수마감"] != n["접수시작"] else "")))
+    else:
+        rows.append(("접수", f"~ {md(n['접수마감'])}" if n.get("접수마감") else "모집중 · 공고문 확인"))
     if is_rent:
         dep = [d.get("임대보증금") for d in n.get("단지", []) if d.get("임대보증금")]
         mon = [d.get("월임대료") for d in n.get("단지", []) if d.get("월임대료")]
         if dep: rows.append(("보증금", man(min(dep)) + ("부터" if len(set(dep)) > 1 else "")))
         if mon: rows.append(("월 임대료", man(min(mon)) + ("부터" if len(set(mon)) > 1 else "")))
     ann = n.get("당첨발표")
-    if ann and n["접수시작"] <= ann <= (date.fromisoformat(n["접수시작"]) + timedelta(days=120)).isoformat():
+    if ann and n.get("접수시작") and n["접수시작"] <= ann <= (date.fromisoformat(n["접수시작"]) + timedelta(days=120)).isoformat():
         rows.append(("당첨 발표", md(ann)))
     if n.get("공급기관"): rows.append(("공급기관", n["공급기관"][:20]))
     rows = rows[:5]
@@ -349,7 +378,7 @@ def scene_card(i, n, today, photo=None, total=5):
     return s
 
 
-def scene_cta(more, photo=None, part=1, parts=1):
+def scene_cta(more, photo=None, part=1, parts=1, more_text=None):
     s = Scene(4.0, ACCENT, photo, "brand")
     y = 300
     if parts > 1:
@@ -364,7 +393,7 @@ def scene_cta(more, photo=None, part=1, parts=1):
         s.add(box2, M, y, 0.0)
         y += box2.height + 60
     if more > 0:
-        a = s.add(text_layer([f"이번 주 공고 {more}건 더 있어요"], font("bold", 52), (210, 232, 225)), M, y, 0.1)
+        a = s.add(text_layer([(more_text or "이번 주 공고 {n}건 더 있어요").format(n=more)], font("bold", 52), (210, 232, 225)), M, y, 0.1)
         y += a.height + 24
     b = s.add(text_layer(["전국 공공임대·분양", "모집공고 한눈에"], font("black", 96), (255, 255, 255), 1.2), M, y, 0.18)
     y += b.height + 24
@@ -383,31 +412,47 @@ def scene_cta(more, photo=None, part=1, parts=1):
     return s
 
 
-def caption(picks, start, end, total, part=1, parts=1, offset=0):
+def caption(picks, start, end, total, part=1, parts=1, offset=0, head_text=None, tags=""):
     lo, hi = offset + 1, offset + len(picks)
-    head = f"📢 이번 주({md(start)}~{md(end)}) 접수 시작하는 공공주택 {total}건 — 공급 규모 {lo}~{hi}위"
+    head = (head_text or "📢 이번 주({s}~{e}) 접수 시작하는 공공주택 {t}건 — 공급 규모 {lo}~{hi}위").format(
+        s=md(start), e=md(end), t=total, lo=lo, hi=hi)
     if parts > 1: head = f"[PART {part}/{parts}] " + head
     L = [head, ""]
     for k, n in enumerate(picks, lo):
         ln = f"{k}. [{SHORT.get(n['시도'], n['시도'])}] {clean_title(n['공고명'])}"
         ln += f" — {n['총공급호수']:,}호" if n.get("총공급호수") else ""
         L.append(ln)
+        if not n.get("접수시작"):
+            L.append("   모집중 (일정은 공고문 확인)"); continue
         far = n["접수마감"] and n["접수마감"] > (date.fromisoformat(n["접수시작"]) + timedelta(days=60)).isoformat()
         L.append(f"   접수 {md(n['접수시작'])}" + ("부터 (선착순)" if far else f" ~ {md(n['접수마감'])}" if n["접수마감"] and n["접수마감"] != n["접수시작"] else ""))
     if parts > 1:
         L += ["", "👉 6~10위는 PART 2 영상에서 이어집니다" if part == 1 else "👈 1~5위는 PART 1 영상에서 확인하세요"]
     L += ["", "전체 공고와 자격 조건은 프로필 링크에서 확인하세요 👉 " + SITE, "",
-          "※ 공공데이터(마이홈·LH·청약홈) 기준이며, 신청 전 공고문 원문을 꼭 확인하세요.", "",
-          "#공공임대 #국민임대 #행복주택 #공공분양 #청약 #LH청약 #임대주택 #청약정보 #내집마련 #주거복지"]
+          "※ 공공데이터(마이홈·LH·청약홈)와 서울주거포털(SH) 기준이며, 신청 전 공고문 원문을 꼭 확인하세요.", "",
+          ((tags + " ") if tags else "") + "#공공임대 #국민임대 #행복주택 #공공분양 #청약 #LH청약 #임대주택 #청약정보 #내집마련 #주거복지"]
     return "\n".join(L)
 
 
 def main():
-    today = date.fromisoformat(sys.argv[1]) if len(sys.argv) > 1 else datetime.now(KST).date()
+    dates = [a for a in sys.argv[1:] if re.match(r"\d{4}-\d{2}-\d{2}$", a)]
+    today = date.fromisoformat(dates[0]) if dates else datetime.now(KST).date()
+    region = sys.argv[sys.argv.index("--region") + 1] if "--region" in sys.argv else None
     start, end = today, today + timedelta(days=6)   # 월요일 게시 기준: 월~일
     items = json.load(open(os.path.join(DATA, "merged.json"), encoding="utf-8"))["items"]
-    week = [n for n in items if n["접수상태"] in ("접수예정", "접수중") and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]
-    picks = pick(items, start.isoformat(), end.isoformat(), k=10)
+    if region:
+        sidos, label, slug = REGIONS[region]
+        week = region_live(items, sidos, today)      # 지역에서 지금 신청 가능한 전체 공고
+        picks = pick_region(week)
+        texts = dict(lines=["지금 신청 가능한", f"{label}", "모집공고"], date_text=f"{md(today)} 기준",
+                     more_text=f"{label} 공고 {{n}}건 더 있어요",
+                     head_text=f"📢 {label} 지금 신청 가능한 공공임대·분양 {{t}}건 — 공급 규모 {{lo}}~{{hi}}위 ({md(today)} 기준)",
+                     tags=f"#{label}임대 #{label}청약 #{label}공공임대")
+    else:
+        slug = ""
+        week = [n for n in items if n["접수상태"] in ("접수예정", "접수중") and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]
+        picks = pick(items, start.isoformat(), end.isoformat(), k=10)
+        texts = {}
     if len(picks) < 3:
         raise SystemExit(f"소개할 공고가 부족합니다 ({len(picks)}건)")
     groups = [picks[:5], picks[5:10]] if len(picks) >= 8 else [picks[:5]]   # 6~10위가 3건 미만이면 한 편만
@@ -428,22 +473,23 @@ def main():
         lo, hi = off + 1, off + len(grp)
         os.makedirs(TMP, exist_ok=True)
         b0 = pi * (len(grp) + 2)
-        scenes = [scene_hook(start, end, len(week), grp, bg(b0), part, parts, lo, hi)] + \
+        scenes = [scene_hook(start, end, len(week), grp, bg(b0), part, parts, lo, hi,
+                             texts.get("lines"), texts.get("date_text"))] + \
                  [scene_card(off + i, n, today, bg(b0 + i), total) for i, n in enumerate(grp, 1)] + \
-                 [scene_cta(max(0, len(week) - total), bg(b0 + len(grp) + 1), part, parts)]
+                 [scene_cta(max(0, len(week) - total), bg(b0 + len(grp) + 1), part, parts, texts.get("more_text"))]
         files = []
         for k, sc in enumerate(scenes):
             p = os.path.join(TMP, f"s{k:02d}.mp4"); sc.render(p); files.append(p)
         lst = os.path.join(TMP, "list.txt")
         open(lst, "w").write("".join(f"file '{f}'\n" for f in files))
-        suffix = f"_{part}" if parts > 1 else ""
+        suffix = (f"_{slug}" if slug else "") + (f"_{part}" if parts > 1 else "")
         out = os.path.join(OUT, f"reel_{tag}{suffix}.mp4"); prt = out[:-4] + ".part.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", lst,
                         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-c:v", "copy", "-c:a", "aac",
                         "-shortest", "-movflags", "+faststart", prt], check=True)
         os.replace(prt, out)
         open(os.path.join(OUT, f"caption_{tag}{suffix}.txt"), "w", encoding="utf-8").write(
-            caption(grp, start, end, len(week), part, parts, off))
+            caption(grp, start, end, len(week), part, parts, off, texts.get("head_text"), texts.get("tags", "")))
         shutil.rmtree(TMP, ignore_errors=True)
         print("완성:", out)
 
