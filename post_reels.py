@@ -104,6 +104,7 @@ def pick_music():
             r = call("GET", f"{API}/ig_audio", params, quiet=True)
         except SystemExit as e:
             print(f"::warning::음악 검색 실패: {e}"); continue
+        if DRY: print(f"::notice::음악 검색 '{q or '인기곡'}' 결과 {len(r.get('data') or [])}건: {json.dumps(r, ensure_ascii=False)[:300]}")
         tracks = [a for a in (r.get("data") or []) if (a.get("duration_in_ms") or 0) >= 30000 or not a.get("duration_in_ms")]
         if tracks:
             a = tracks[day % len(tracks)]
