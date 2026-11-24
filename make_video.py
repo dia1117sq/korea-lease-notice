@@ -69,7 +69,7 @@ def is_public(n):
     if "민영" in t or "임의공급" in t or "잔여세대" in t or "오피스텔" in t:
         return False
     org = n.get("공급기관") or ""
-    return org in ("LH", "SH") or "공사" in org or any(k in t for k in ("국민", "공공", "임대", "행복", "영구", "수요자맞춤", "희망하우징"))
+    return org in ("LH", "SH", "GH") or "공사" in org or any(k in t for k in ("국민", "공공", "임대", "행복", "영구", "수요자맞춤", "희망하우징"))
 
 
 def pick(items, start, end, k=10):
@@ -429,7 +429,7 @@ def caption(picks, start, end, total, part=1, parts=1, offset=0, head_text=None,
     if parts > 1:
         L += ["", "👉 6~10위는 PART 2 영상에서 이어집니다" if part == 1 else "👈 1~5위는 PART 1 영상에서 확인하세요"]
     L += ["", "전체 공고와 자격 조건은 프로필 링크에서 확인하세요 👉 " + SITE, "",
-          "※ 공공데이터(마이홈·LH·청약홈)와 서울주거포털(SH) 기준이며, 신청 전 공고문 원문을 꼭 확인하세요.", "",
+          "※ 공공데이터(마이홈·LH·청약홈)와 서울주거포털(SH)·GH주택청약센터 기준이며, 신청 전 공고문 원문을 꼭 확인하세요.", "",
           ((tags + " ") if tags else "") + "#공공임대 #국민임대 #행복주택 #공공분양 #청약 #LH청약 #임대주택 #청약정보 #내집마련 #주거복지"]
     return "\n".join(L)
 

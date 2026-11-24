@@ -62,6 +62,7 @@ jobs:
           python enrich_lh_supply.py 300
           python collect_applyhome.py
           python collect_sh.py
+          python collect_gh.py || true
       - name: 통합·사이트·영상 생성
         env:
           REGION_INPUT: ${{ inputs.region || 'auto' }}

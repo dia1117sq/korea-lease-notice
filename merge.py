@@ -147,6 +147,28 @@ def main():
                 "마이홈URL": "", "청약홈URL": "", "문의": r["문의"], "SH상태": r["SH상태"],
             }
 
+    # 3-3) GH(경기주택도시공사): GH주택청약·임대센터에서 수집한 공고 — 마이홈에 같은 공고가 있으면 합침
+    gh_path = os.path.join(DATA, "gh_notices.json")
+    if os.path.exists(gh_path):
+        for r in json.load(open(gh_path, encoding="utf-8"))["items"]:
+            hit = next((n for n in out.values() if ("경기주택도시공사" in (n["공급기관"] or "") or n["공급기관"] == "GH")
+                        and similar(r["공고명"], n["공고명"]) and near(n["모집공고일"], r["모집공고일"])), None)
+            if hit:
+                hit["출처"].append("GH"); hit["GH상태"] = r["GH상태"]
+                for k in ("접수시작", "접수마감", "당첨발표"):
+                    hit[k] = hit[k] or r[k]
+                if not hit["총공급호수"]: hit["총공급호수"] = r["총공급호수"]
+                if not hit["단지"]: hit["단지"] = r["단지"]
+                continue
+            out[r["id"]] = {
+                "id": r["id"], "출처": ["GH"], "구분": "임대", "유형": r["유형"], "공급기관": "GH",
+                "공고명": r["공고명"], "공고상태": "정정공고" if "정정" in r["공고명"] else "",
+                "시도": r["시도"], "시군구": r["시군구"], "모집공고일": r["모집공고일"],
+                "접수시작": r["접수시작"], "접수마감": r["접수마감"], "당첨발표": r["당첨발표"],
+                "총공급호수": r["총공급호수"], "단지": r["단지"], "공고원문URL": r["공고원문URL"],
+                "마이홈URL": "", "청약홈URL": "", "문의": r["문의"], "GH상태": r["GH상태"],
+            }
+
     # 4) 정정공고가 나오면 이전 공고는 숨김
     #   a) 마이홈의 정정 전 공고ID 사슬
     replaced = {}
@@ -174,7 +196,7 @@ def main():
         st = status(n["접수시작"], n["접수마감"], today)
         if n["출처"] == ["LH"]:   # LH 단독 공고는 접수시작일이 없어 LH 상태를 따름
             st = {"접수마감": "접수마감", "접수중": "접수중"}.get(n.get("LH상태"), "접수예정" if st != "접수마감" else st)
-        if st == "확인필요" and n.get("SH상태") == "모집중":   # SH 본문에 날짜가 없으면 목록의 '모집중'을 따름
+        if st == "확인필요" and (n.get("SH상태") == "모집중" or n.get("GH상태") == "접수중"):   # SH 본문에 날짜가 없으면 목록의 '모집중'을 따름
             st = "접수중"
         n["접수상태"] = st
         n["D-day"] = (datetime.strptime(n["접수마감"], "%Y-%m-%d").date() - now.date()).days if n["접수마감"] else None

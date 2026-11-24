@@ -7,6 +7,7 @@
 | enrich_lh_supply.py | LH 공고별 공급정보 (`getLeaseNoticeSplInfo1`) | 주택형·면적·세대수·보증금·임대료 |
 | collect_applyhome.py | 청약홈 분양정보 (api.odcloud.kr) | APT·잔여세대·오피스텔·공공지원민간임대·임의공급, 특공/1·2순위/당첨/계약 일정 |
 | collect_sh.py | 서울주거포털 SH 공고 목록·상세 (공식 API 없음) | SH 모집중 공고, 본문에서 신청기간·공급호수·발표일 추출 |
+| collect_gh.py | GH주택청약·임대센터 임대·매입임대 청약공고 목록·상세 (공식 API 없음) | GH 접수예정·접수중 공고, 접수기간·모집호수·소재지 (마이홈 GH 공고와 합침) |
 | merge.py | — | 세 출처 통합·중복 제거 (LH 공고번호, 공고일±3일+지역+단지명), 접수상태·D-day 계산 |
 
 실행: `./run_all.sh` → 결과는 `data/` (json + 엑셀용 csv).
