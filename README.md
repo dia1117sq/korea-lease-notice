@@ -22,7 +22,7 @@
 
 ## 인스타그램 자동 게시 (매주 월·수·목·금)
 `.github/workflows/weekly-reels.yml` — 06:20 시작 → 최신 공고 수집 → `make_video.py` 로 릴스 2편(공급 규모 1~5위 / 6~10위) →
-월 = 전국 '이번 주 접수 시작', 수 = 서울, 목 = 경기, 금 = 경상권(경북·경남·부산·대구·울산) (`--region 서울|경기|경상`) →
+월 = 전국 '이번 주 접수 시작', 수 = 서울, 목 = 경기·인천, 금 = 경상권(경북·경남·부산·대구·울산) (`--region 서울|경기|경상`) →
 사이트 `reels/` 에 영상 공개 → `post_reels.py` 가 **07:00 PART 1, 07:10 PART 2** 게시.
 - 필요한 Secret: `IG_USER_ID`, `IG_ACCESS_TOKEN` (Instagram API with Instagram Login, 권한 `instagram_business_basic`, `instagram_business_content_publish`)
 - 시험: Actions → weekly-reels → Run workflow (게시 체크 해제 = 영상만 생성)

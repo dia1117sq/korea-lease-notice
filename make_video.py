@@ -90,7 +90,7 @@ def pick(items, start, end, k=10):
 
 REGIONS = {   # 요일별 지역 영상: 키 → (시·도 목록, 화면 표시 이름, 파일 이름용)
     "서울": (["서울특별시"], "서울", "seoul"),
-    "경기": (["경기도"], "경기", "gyeonggi"),
+    "경기": (["경기도", "인천광역시"], "경기·인천", "gyeonggi"),
     "경상": (["경상북도", "경상남도", "부산광역시", "대구광역시", "울산광역시"], "경상권", "gyeongsang"),
 }
 
@@ -447,7 +447,7 @@ def main():
         texts = dict(lines=["지금 신청 가능한", f"{label}", "모집공고"], date_text=f"{md(today)} 기준",
                      more_text=f"{label} 공고 {{n}}건 더 있어요",
                      head_text=f"📢 {label} 지금 신청 가능한 공공임대·분양 {{t}}건 — 공급 규모 {{lo}}~{{hi}}위 ({md(today)} 기준)",
-                     tags=f"#{label}임대 #{label}청약 #{label}공공임대")
+                     tags=" ".join(f"#{x}임대 #{x}청약" for x in label.split("·")) + f" #{label.replace('·', '')}공공임대")
     else:
         slug = ""
         week = [n for n in items if n["접수상태"] in ("접수예정", "접수중") and n["접수시작"] and start.isoformat() <= n["접수시작"] <= end.isoformat() and is_public(n)]

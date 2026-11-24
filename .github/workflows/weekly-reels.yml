@@ -1,5 +1,5 @@
 # 매주 월·수·목·금: 최신 공고 수집 → 릴스 2편 생성 → 사이트에 영상 공개 → 07:00 PART 1, 07:10 PART 2 인스타그램 게시
-#   월: 전국 '이번 주 접수 시작' TOP 10 / 수: 서울 TOP 10 / 목: 경기 TOP 10 / 금: 경상권(경북·경남·부산·대구·울산) TOP 10
+#   월: 전국 '이번 주 접수 시작' TOP 10 / 수: 서울 TOP 10 / 목: 경기·인천 TOP 10 / 금: 경상권(경북·경남·부산·대구·울산) TOP 10
 name: weekly-reels
 
 on:
@@ -69,7 +69,7 @@ jobs:
         run: |
           python merge.py
           python build_site.py
-          # 요일(KST)에 맞춰 영상 종류 선택: 월=전국, 수=서울, 목=경기, 금=경상권
+          # 요일(KST)에 맞춰 영상 종류 선택: 월=전국, 수=서울, 목=경기·인천, 금=경상권
           R="$REGION_INPUT"
           if [ "$R" = "auto" ]; then
             case "$COMMIT_MSG" in *"[region:서울]"*) R=서울;; *"[region:경기]"*) R=경기;; *"[region:경상]"*) R=경상;; esac
