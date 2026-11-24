@@ -4,7 +4,9 @@ name: weekly-reels
 
 on:
   schedule:
-    - cron: "20 21 * * 0,2,3,4"   # UTC 일·화·수·목 21:20 = KST 월·수·목·금 06:20 (GitHub 예약은 늦을 수 있어 미리 시작)
+    - cron: "20 21 * * 0,2,3,4"   # 예비용: GitHub 예약은 몇 시간 늦거나 빠질 때가 있음. 주 실행은 아래 push(reels-trigger.txt)
+                                  # Claude 예약 작업이 월·수·목·금 06:25(KST)에 reels-trigger.txt를 고쳐 [post-now] 커밋을 올림
+                                  # 같은 영상이 이미 게시됐으면 post_reels.py가 건너뛰어 두 번 올라가지 않음
   workflow_dispatch:
     inputs:
       post:
@@ -18,7 +20,7 @@ on:
         default: auto
   push:
     branches: [main]
-    paths: [".github/workflows/weekly-reels.yml", "post_reels.py", "make_video.py"]   # 설정을 바꾸면 게시 없이 시험 실행 (커밋 메시지 [region:서울] 등으로 지역 지정)
+    paths: [".github/workflows/weekly-reels.yml", "post_reels.py", "make_video.py", "reels-trigger.txt"]   # 설정을 바꾸면 게시 없이 시험 실행 (커밋 메시지 [region:서울] 등으로 지역 지정)
 
 permissions:
   contents: read

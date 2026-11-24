@@ -114,6 +114,21 @@ def wait_until(hhmm):
         time.sleep((at - now).total_seconds())
 
 
+def already_posted(caption, hours=14):
+    """같은 첫 줄 캡션의 게시물이 최근 몇 시간 안에 있으면 True (예약·수동 실행이 겹쳐도 두 번 올리지 않음)"""
+    head = caption.strip().splitlines()[0].strip() if caption.strip() else ""
+    try:
+        media = call("GET", f"{API}/{USER}/media", {"fields": "caption,timestamp", "limit": "10"})
+    except SystemExit:
+        return False
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    for m in media.get("data") or []:
+        ts = datetime.strptime(m.get("timestamp", "1970-01-01T00:00:00+0000"), "%Y-%m-%dT%H:%M:%S%z")
+        if ts >= since and (m.get("caption") or "").strip().splitlines()[:1] == [head]:
+            return True
+    return False
+
+
 def main():
     if sys.argv[1:2] == ["check"]:
         return check()
@@ -130,8 +145,14 @@ def main():
         print(f"::notice::시험 실행: 게시하지 않음 (영상 {len(jobs)}편 준비 완료)")
         return
     refresh_token()
+    todo = []
+    for url, cap, at in jobs:
+        if already_posted(open(cap, encoding="utf-8").read()):
+            print(f"::notice::이미 게시된 영상이라 건너뜀 ({at}): {url}")
+        else:
+            todo.append((url, cap, at))
     ready = []
-    for url, cap, at in jobs:                      # 1) 미리 업로드·처리
+    for url, cap, at in todo:                      # 1) 미리 업로드·처리
         cid = create(url, open(cap, encoding="utf-8").read())
         log("업로드 시작:", url, "→", cid)
         ready.append((cid, at))
