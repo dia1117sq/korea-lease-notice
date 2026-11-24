@@ -23,7 +23,7 @@ HOST = "graph.facebook.com" if TOKEN.startswith("EAA") else "graph.instagram.com
 API = f"https://{HOST}/{VER}"
 
 
-def call(method, url, data=None):
+def call(method, url, data=None, quiet=False):
     data = dict(data or {}); data["access_token"] = TOKEN
     q = urllib.parse.urlencode(data)
     req = urllib.request.Request(url + ("?" + q if method == "GET" else ""),
@@ -33,7 +33,7 @@ def call(method, url, data=None):
             return json.load(r)
     except urllib.error.HTTPError as e:
         msg = f"Instagram API 오류 {e.code}: {e.read().decode(errors='replace')[:500]}"
-        print("::error::" + msg.replace("\n", " "))
+        if not quiet: print("::error::" + msg.replace("\n", " "))
         raise SystemExit(msg)
 
 
@@ -86,9 +86,45 @@ def refresh_token():
         print("::warning::Instagram 토큰 문자열이 바뀌었습니다. 저장소 Secret IG_ACCESS_TOKEN 을 새 값으로 바꿔야 할 수 있습니다.")
 
 
-def create(video_url, caption):
-    r = call("POST", f"{API}/{USER}/media", {"media_type": "REELS", "video_url": video_url,
-                                             "caption": caption, "share_to_feed": "true"})
+# 인스타그램 음악: IG_MUSIC=off 이면 끔, 비우면 아래 검색어를 날짜마다 돌려 가며 사용, 다른 값이면 그 검색어로 찾음
+MUSIC = os.environ.get("IG_MUSIC", "").strip()
+MUSIC_QUERIES = ["lofi", "chill", "acoustic", "piano", "jazz", "bright", "upbeat", "calm"]
+
+
+def pick_music():
+    """Instagram Audio API에서 게시용으로 허용된 음악 1곡 고르기 (Facebook 로그인 토큰 전용). 실패하면 None."""
+    if MUSIC.lower() == "off" or HOST != "graph.facebook.com":
+        return None
+    day = datetime.now(KST).timetuple().tm_yday
+    queries = [MUSIC] if MUSIC else [MUSIC_QUERIES[day % len(MUSIC_QUERIES)], ""]
+    for q in queries:
+        params = {"audio_type": "music", "user_id": USER}
+        if q: params["search_query"] = q
+        try:
+            r = call("GET", f"{API}/ig_audio", params, quiet=True)
+        except SystemExit as e:
+            print(f"::warning::음악 검색 실패: {e}"); continue
+        tracks = [a for a in (r.get("data") or []) if (a.get("duration_in_ms") or 0) >= 30000 or not a.get("duration_in_ms")]
+        if tracks:
+            a = tracks[day % len(tracks)]
+            name = f"{a.get('title', '')} - {a.get('display_artist', '')}".strip(" -")
+            log(f"음악 선택 ('{q or '인기곡'}'): {name} ({a.get('id')})")
+            return a.get("id"), name
+    return None
+
+
+def create(video_url, caption, music=None):
+    data = {"media_type": "REELS", "video_url": video_url, "caption": caption, "share_to_feed": "true"}
+    if music:
+        data["audio_configuration"] = json.dumps({"audio_id": music[0], "audio_volume": 100, "video_volume": 1})
+        try:
+            r = call("POST", f"{API}/{USER}/media", data, quiet=True)
+            print(f"::notice::배경 음악: {music[1]}")
+            return r["id"]
+        except SystemExit as e:
+            print(f"::warning::음악을 붙여 올리기 실패, 음악 없이 다시 시도: {e}")
+            data.pop("audio_configuration")
+    r = call("POST", f"{API}/{USER}/media", data)
     return r["id"]
 
 
@@ -142,6 +178,9 @@ def main():
     if DRY:
         for url, cap, at in jobs:
             log(f"[미리보기] {at} 게시 예정: {url}\n" + open(cap, encoding="utf-8").read()[:200])
+        if USER and TOKEN:
+            m = pick_music()
+            print(f"::notice::시험 실행 음악 선택: {m[1] if m else '없음(음악 없이 게시)'}")
         print(f"::notice::시험 실행: 게시하지 않음 (영상 {len(jobs)}편 준비 완료)")
         return
     refresh_token()
@@ -151,9 +190,10 @@ def main():
             print(f"::notice::이미 게시된 영상이라 건너뜀 ({at}): {url}")
         else:
             todo.append((url, cap, at))
+    music = pick_music() if todo else None          # PART 1·2 같은 음악
     ready = []
     for url, cap, at in todo:                      # 1) 미리 업로드·처리
-        cid = create(url, open(cap, encoding="utf-8").read())
+        cid = create(url, open(cap, encoding="utf-8").read(), music)
         log("업로드 시작:", url, "→", cid)
         ready.append((cid, at))
     for cid, _ in ready:
