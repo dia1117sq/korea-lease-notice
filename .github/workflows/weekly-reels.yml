@@ -87,7 +87,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
-      # 영상이 든 큰 업로드는 GitHub 처리에 시간이 걸려 배포 단계가 파일을 못 찾을 때가 있음 → 1분 간격으로 최대 3번
+      # 업로드 직후엔 GitHub가 파일을 아직 못 찾는 경우가 있어 잠시 기다린 뒤, 실패하면 1분 간격으로 최대 3번
+      - run: sleep 20
       - id: deploy1
         uses: actions/deploy-pages@v5
         continue-on-error: true
