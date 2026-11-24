@@ -50,6 +50,10 @@ button.stat[aria-pressed="true"]{border-color:var(--accent);background:var(--acc
 .filters input:focus,.filters select:focus,.seg button:focus-visible,.row:focus-visible,.btn:focus-visible,.back:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .seg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
 .seg button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 13px;cursor:pointer}
+.seg .reset{margin-left:auto;background:transparent;color:var(--muted);border-style:dashed}
+.seg .reset:not(:disabled){color:var(--accent);border-color:var(--accent);border-style:solid}
+.seg .reset:not(:disabled):hover{background:var(--accent-soft)}
+.seg .reset:disabled{opacity:.5;cursor:default}
 .seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
 .count{color:var(--muted);font-size:13px;margin:0 0 8px}
 .list{display:flex;flex-direction:column;gap:8px;padding-bottom:40px}
@@ -142,6 +146,7 @@ footer{color:var(--muted);font-size:12.5px;padding:20px 0 32px;border-top:1px so
       <button data-s="접수중" aria-pressed="true">접수중</button>
       <button data-s="접수예정" aria-pressed="true">접수예정</button>
       <button data-s="접수마감" aria-pressed="false">마감</button>
+      <button type="button" class="reset" id="reset" data-reset disabled title="검색어·지역·유형·정렬·구분·접수상태를 모두 처음 상태로">↺ 초기화</button>
     </div>
     <p class="count" id="count"></p>
     <div class="list" id="list"></div>
@@ -201,6 +206,7 @@ function rowHtml(n){
 }
 
 function renderList(){
+  const rb = document.getElementById("reset"); if (rb) rb.disabled = isDefault();
   const q = state.q.trim().toLowerCase();
   let r = items.filter(n => state.st.has(n.접수상태)
     && (state.quick !== "today" || (n.접수상태 === "접수중" && n.접수마감 === DATA.today))
@@ -218,7 +224,7 @@ function renderList(){
   $("#list").innerHTML = "";
   if (!r.length){
     $("#count").textContent = "0건";
-    $("#list").innerHTML = `<div class="empty">조건에 맞는 공고가 없습니다. 검색어나 필터를 바꿔 보세요.</div>`;
+    $("#list").innerHTML = `<div class="empty">조건에 맞는 공고가 없습니다. 검색어나 필터를 바꿔 보세요.<br><button type="button" class="more" onclick="resetFilters()">↺ 필터 초기화</button></div>`;
     $("#pager").innerHTML = ""; return;
   }
   mobileMQ.matches ? loadMore() : showPage(1, false);
@@ -375,11 +381,23 @@ $("#sido").onchange = e => { state.sido = e.target.value; renderList(); };
 $("#type").onchange = e => { state.type = e.target.value; renderList(); };
 $("#sort").onchange = e => { state.sort = e.target.value; renderList(); };
 $("#kind").onclick = e => {
-  const b = e.target.closest("button"); if (!b) return;
+  const b = e.target.closest("button"); if (!b || b.dataset.reset !== undefined) return;
   if (b.dataset.v !== undefined){ state.kind = b.dataset.v; $("#kind").querySelectorAll("[data-v]").forEach(x => x.setAttribute("aria-pressed", x === b)); }
   else { const s = b.dataset.s; state.st.has(s) ? state.st.delete(s) : state.st.add(s); if (!state.st.size) state.st.add(s); state.quick = ""; syncStatusButtons(); }
   renderList();
 };
+// 필터 초기화: 모든 조건을 처음 상태로
+function isDefault(){
+  return !state.q && !state.sido && !state.type && !state.kind && !state.quick && state.sort === "deadline"
+    && state.st.size === DEFAULT_ST.length && DEFAULT_ST.every(x => state.st.has(x));
+}
+function resetFilters(){
+  Object.assign(state, {q:"", sido:"", type:"", kind:"", quick:"", sort:"deadline", st:new Set(DEFAULT_ST)});
+  $("#q").value = ""; $("#sido").value = ""; $("#type").value = ""; $("#sort").value = "deadline";
+  $("#kind").querySelectorAll("[data-v]").forEach(x => x.setAttribute("aria-pressed", x.dataset.v === ""));
+  syncStatusButtons(); renderList();
+}
+$("#reset").onclick = resetFilters;
 $("#home").onclick = e => { e.preventDefault(); location.hash = ""; };
 window.addEventListener("hashchange", route);
 renderList(); route(); showVisits();
