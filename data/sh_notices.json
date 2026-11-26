@@ -1,9 +1,25 @@
 {
- "collected_at": "2026-11-25T14:03:19.446787+09:00",
- "count": 6,
+ "collected_at": "2026-11-26T13:24:51.200293+09:00",
+ "count": 7,
  "items": [
   {
    "id": "SH-임대-1",
+   "구분": "임대",
+   "유형": "장기안심주택",
+   "공고명": "2026년 제2차 보증금지원형 장기안심주택 입주자 모집공고",
+   "공급기관": "SH",
+   "시도": "서울특별시",
+   "모집공고일": "2026-11-25",
+   "접수시작": "2026-12-14",
+   "접수마감": "2026-12-16",
+   "당첨발표": "2027-03-18",
+   "총공급호수": 7000,
+   "SH상태": "모집중",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=1&supplyType=publicLease",
+   "문의": "SH 콜센터 1600-3456"
+  },
+  {
+   "id": "SH-임대-2",
    "구분": "임대",
    "유형": "영구임대주택",
    "공고명": "2026년 영구임대주택 예비입주자모집 공고",
@@ -15,11 +31,11 @@
    "당첨발표": "2027-03-25",
    "총공급호수": 0,
    "SH상태": "모집중",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=1&supplyType=publicLease",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=2&supplyType=publicLease",
    "문의": "SH 콜센터 1600-3456"
   },
   {
-   "id": "SH-임대-2",
+   "id": "SH-임대-3",
    "구분": "임대",
    "유형": "수요자맞춤형",
    "공고명": "2026년 하반기 금천구 홀몸어르신(수요자맞춤형)주택 잔여세대 입주자 모집 공고",
@@ -31,11 +47,11 @@
    "당첨발표": "2026-12-23",
    "총공급호수": 7,
    "SH상태": "모집중",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=2&supplyType=publicLease",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=3&supplyType=publicLease",
    "문의": "SH 콜센터 1600-3456"
   },
   {
-   "id": "SH-임대-3",
+   "id": "SH-임대-4",
    "구분": "임대",
    "유형": "수요자맞춤형",
    "공고명": "2026년 하반기 금천구 신혼부부(수요자맞춤형)주택 잔여세대 입주자 모집 공고",
@@ -47,11 +63,11 @@
    "당첨발표": "2027-02-19",
    "총공급호수": 13,
    "SH상태": "모집중",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=3&supplyType=publicLease",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=4&supplyType=publicLease",
    "문의": "SH 콜센터 1600-3456"
   },
   {
-   "id": "SH-임대-4",
+   "id": "SH-임대-5",
    "구분": "임대",
    "유형": "수요자맞춤형",
    "공고명": "2026년 마포구 신혼부부,청년(수요자맞춤형)주택 잔여세대 입주자 모집 공고",
@@ -63,11 +79,11 @@
    "당첨발표": "2027-02-16",
    "총공급호수": 8,
    "SH상태": "모집중",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=4&supplyType=publicLease",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=5&supplyType=publicLease",
    "문의": "SH 콜센터 1600-3456"
   },
   {
-   "id": "SH-임대-5",
+   "id": "SH-임대-6",
    "구분": "임대",
    "유형": "수요자맞춤형",
    "공고명": "동작구 홀몸어르신(수요자맞춤형)주택 잔여세대 입주자 모집 공고",
@@ -79,11 +95,11 @@
    "당첨발표": "2027-01-18",
    "총공급호수": 0,
    "SH상태": "모집중",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=5&supplyType=publicLease",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=6&supplyType=publicLease",
    "문의": "SH 콜센터 1600-3456"
   },
   {
-   "id": "SH-분양-7",
+   "id": "SH-분양-8",
    "구분": "분양",
    "유형": "주택분양",
    "공고명": "[정정] 고덕강일지구 3단지 토지임대부 분양주택 입주자모집공고",
@@ -95,7 +111,7 @@
    "당첨발표": "2026-10-29",
    "총공급호수": 1305,
    "SH상태": "분양부",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicSale/view?seq=7&supplyType=publicSale",
+   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicSale/view?seq=8&supplyType=publicSale",
    "문의": "SH 콜센터 1600-3456"
   }
  ]
