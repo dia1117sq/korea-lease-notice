@@ -1,6 +1,6 @@
 {
- "collected_at": "2026-11-26T13:24:51.200293+09:00",
- "count": 7,
+ "collected_at": "2026-11-27T13:34:08.846806+09:00",
+ "count": 6,
  "items": [
   {
    "id": "SH-임대-1",
@@ -96,22 +96,6 @@
    "총공급호수": 0,
    "SH상태": "모집중",
    "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicLease/view?seq=6&supplyType=publicLease",
-   "문의": "SH 콜센터 1600-3456"
-  },
-  {
-   "id": "SH-분양-8",
-   "구분": "분양",
-   "유형": "주택분양",
-   "공고명": "[정정] 고덕강일지구 3단지 토지임대부 분양주택 입주자모집공고",
-   "공급기관": "SH",
-   "시도": "서울특별시",
-   "모집공고일": "2026-10-16",
-   "접수시작": "2026-10-26",
-   "접수마감": "2026-10-27",
-   "당첨발표": "2026-10-29",
-   "총공급호수": 1305,
-   "SH상태": "분양부",
-   "공고원문URL": "https://housing.seoul.go.kr/site/main/sh/publicSale/view?seq=8&supplyType=publicSale",
    "문의": "SH 콜센터 1600-3456"
   }
  ]
